@@ -1,0 +1,737 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RVIZ Interface (Single File)</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome (for icons) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 900px; /* Adjust as needed */
+        }
+        #map-container {
+            background-color: #e9ecef; /* Light gray for map background if image fails */
+            border: 1px solid #ccc;
+            margin-bottom: 1rem;
+        }
+        #map-canvas {
+            cursor: default;
+        }
+        #map-canvas.drawing-active {
+            cursor: crosshair;
+        }
+        .btn {
+            box-shadow: 0 2px 5px rgba(0,0,0,0.15);
+        }
+        .btn-primary.active { /* Style for active 2D Nav Goal button */
+            background-color: #2ecc71;
+            border-color: #2ecc71;
+        }
+        .btn-danger {
+            background-color: #DC3545;
+            color: white;
+        }
+        .btn-danger.stopped {
+            background-color: #6C757D; /* Gray when stopped */
+        }
+        .button-row .btn {
+            margin-bottom: 0.5rem; /* Spacing for buttons if they wrap */
+        }
+    </style>
+</head>
+<body>
+    <div class="container mt-4 mb-4">
+        <h3 class="text-center mb-3">RVIZ INTERFACE</h3>
+        <div class="button-row d-flex flex-wrap justify-content-center mb-3">
+            <button id="send-goal-btn" class="btn btn-primary m-1"><i class="fas fa-bullseye"></i> Send Goal</button>
+            <button id="nav-goal-btn" class="btn btn-primary m-1"><i class="fas fa-crosshairs"></i> 2D Nav Goal</button>
+            <button id="move-line-btn" class="btn btn-primary m-1"><i class="fas fa-route"></i> Move Line</button>
+            <button id="move-arc-btn" class="btn btn-primary m-1"><i class="fas fa-circle-notch"></i> Move Arc</button>
+            <button id="move-path-btn" class="btn btn-primary m-1"><i class="fas fa-road"></i> Move Path</button>
+            <button id="move-spline3-btn" class="btn btn-primary m-1"><i class="fas fa-wave-square"></i> Move Spline 3</button>
+            <button id="move-spline5-btn" class="btn btn-primary m-1"><i class="fas fa-bezier-curve"></i> Move Spline 5</button>
+            <button id="emergency-stop-btn" class="btn btn-danger m-1"><i class="fas fa-stop"></i> Emergency Stop</button>
+        </div>
+
+        <div id="map-container" style="position: relative; width: 800px; height: 600px; margin-left: auto; margin-right:auto;">
+            <img id="map-image-bg" src="static/map_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 1;">
+            <img id="lidar-f-image" src="static/f_scan_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 2; opacity: 0.7; pointer-events: none;">
+            <img id="lidar-b-image" src="static/lidar_b_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3; opacity: 0.7; pointer-events: none;">
+            <img id="path-image" src="static/path_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 4; opacity: 0.7; pointer-events: none;">
+            <img id="robot-image" src="static/robot_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5; opacity: 0.7; pointer-events: none;">
+            <img id="paths-image" src="static/path_img.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 6; opacity: 0.7; pointer-events: none;">
+            <img id="costmap-image" src="static/cost_map_image.png" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 7; opacity: 0.7; pointer-events: none;">
+            <canvas id="map-canvas" width="800" height="600" style="position: absolute; top: 0; left: 0; z-index: 9;"></canvas>
+        </div>
+        <p id="map-hint" class="text-info mt-2 text-center" style="font-style: italic; display:none;">Click and drag on the map to set a 2D Nav Goal when active.</p>
+        <div id="goal-status" class="mt-2 alert alert-info text-center" role="alert">Connecting to ROS...</div>
+
+        <!-- Goal Modal -->
+        <div class="modal fade" id="goalModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Enter Goal Coordinates</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="mb-3 row">
+                            <label for="goal-x" class="col-sm-3 col-form-label">X (m):</label>
+                            <div class="col-sm-9"><input type="number" class="form-control" id="goal-x" placeholder="X Coordinate"></div>
+                        </div>
+                        <div class="mb-3 row">
+                            <label for="goal-y" class="col-sm-3 col-form-label">Y (m):</label>
+                            <div class="col-sm-9"><input type="number" class="form-control" id="goal-y" placeholder="Y Coordinate"></div>
+                        </div>
+                        <div class="mb-3 row">
+                            <label for="goal-angle" class="col-sm-3 col-form-label">Angle (rad):</label>
+                            <div class="col-sm-9"><input type="number" class="form-control" id="goal-angle" placeholder="Angle in radians" value="0"></div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="button" id="send-goal-modal-btn" class="btn btn-primary">Send</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Movement Confirmation Modal -->
+        <div class="modal fade" id="movementParamsModal" tabindex="-1">
+            <div class="modal-dialog">
+                <div class="modal-content">
+                    <div class="modal-header"><h5 class="modal-title" id="movementModalTitle">Confirm Movement</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <p id="movementModalBodyText">Are you sure you want to start this movement?</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" id="start-movement-modal-btn" class="btn btn-primary">Start</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ROSLIBJS -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/roslibjs/1.3.0/roslib.min.js"></script>
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const ROSBRIDGE_SERVER_IP = 'localhost'; // Or your ROS master's IP
+            const ROSBRIDGE_SERVER_PORT = '9090'; // Default rosbridge port
+            const GOAL_TOPIC = '/move_base_simple/goal';
+            const TWIST_TOPIC = '/cmd_vel';
+            const POSE_TOPIC = '/amcl_pose';
+            const FIXED_ARROW_LENGTH = 30; // pixels on canvas
+
+            let ros;
+            let goalPub;
+            let twistPub;
+            let poseSub;
+
+            let currentPose = null;
+            let mapInfo = null;
+            let isMovingGlobal = true; // Global flag for movement control, distinct from individual movement function's 'isMoving'
+            let isDrawingGoal = false;
+            let navGoalStartPoint = null;
+
+            const mapContainer = document.getElementById('map-container');
+            const mapCanvas = document.getElementById('map-canvas');
+            const mapCtx = mapCanvas.getContext('2d');
+            const mapImageBg = document.getElementById('map-image-bg');
+            const goalStatusDiv = document.getElementById('goal-status');
+
+            const goalModalEl = document.getElementById('goalModal');
+            const goalModal = new bootstrap.Modal(goalModalEl);
+            const movementParamsModalEl = document.getElementById('movementParamsModal');
+            const movementParamsModal = new bootstrap.Modal(movementParamsModalEl);
+            let currentMovementAction = null;
+
+            function updateStatus(message, type = 'info') {
+                goalStatusDiv.textContent = message;
+                goalStatusDiv.className = `mt-2 alert alert-${type} text-center`; // Bootstrap alert classes
+            }
+
+            function connectROS() {
+                ros = new ROSLIB.Ros({
+                    url: `ws://${ROSBRIDGE_SERVER_IP}:${ROSBRIDGE_SERVER_PORT}`
+                });
+
+                ros.on('connection', () => {
+                    updateStatus('✅ Connected to ROS Bridge.', 'success');
+                    console.log('Connected to ROS Bridge.');
+                    initializePublishersSubscribers();
+                });
+
+                ros.on('error', (error) => {
+                    updateStatus('❌ Error connecting to ROS Bridge. Make sure rosbridge_server is running.', 'danger');
+                    console.error('Error connecting to websocket server: ', error);
+                });
+
+                ros.on('close', () => {
+                    updateStatus('🔌 Connection to ROS Bridge closed. Attempting to reconnect...', 'warning');
+                    console.log('Connection to websocket server closed.');
+                    // Optional: implement reconnection logic here
+                    setTimeout(connectROS, 5000); // Try to reconnect after 5 seconds
+                });
+            }
+
+            function initializePublishersSubscribers() {
+                goalPub = new ROSLIB.Topic({
+                    ros: ros,
+                    name: GOAL_TOPIC,
+                    messageType: 'geometry_msgs/PoseStamped'
+                });
+
+                twistPub = new ROSLIB.Topic({
+                    ros: ros,
+                    name: TWIST_TOPIC,
+                    messageType: 'geometry_msgs/Twist'
+                });
+
+                poseSub = new ROSLIB.Topic({
+                    ros: ros,
+                    name: POSE_TOPIC,
+                    messageType: 'geometry_msgs/PoseWithCovarianceStamped'
+                });
+
+                poseSub.subscribe((message) => {
+                    currentPose = message.pose.pose;
+                    // console.log('Current Pose:', currentPose.position.x, currentPose.position.y);
+                });
+            }
+
+            async function loadMapInfo() {
+                try {
+                    const response = await fetch('static/map_image.json'); // Ensure this path is correct
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}, file: static/map_image.json`);
+                    }
+                    mapInfo = await response.json();
+                    console.log('Map info loaded:', mapInfo);
+
+                    // Set canvas and container dimensions based on mapInfo or image
+                    let mapWidth = 800, mapHeight = 600; // Defaults
+
+                    if (mapInfo && mapInfo.width && mapInfo.height) {
+                        mapWidth = mapInfo.width;
+                        mapHeight = mapInfo.height;
+                    } else if (mapImageBg.complete && mapImageBg.naturalWidth > 0) {
+                        mapWidth = mapImageBg.naturalWidth;
+                        mapHeight = mapImageBg.naturalHeight;
+                    }
+                    
+                    mapCanvas.width = mapWidth;
+                    mapCanvas.height = mapHeight;
+                    mapContainer.style.width = `${mapWidth}px`;
+                    mapContainer.style.height = `${mapHeight}px`;
+
+                } catch (e) {
+                    console.error("Failed to load map_info.json:", e);
+                    updateStatus('⚠️ Warning: map_image.json not found or invalid. Coordinate conversions might be inaccurate. Using default dimensions.', 'warning');
+                     // Fallback dimensions if map_info.json fails
+                    mapCanvas.width = mapImageBg.naturalWidth || 800;
+                    mapCanvas.height = mapImageBg.naturalHeight || 600;
+                    mapContainer.style.width = `${mapCanvas.width}px`;
+                    mapContainer.style.height = `${mapCanvas.height}px`;
+                }
+            }
+            
+            // Ensure mapImageBg is loaded before attempting to use its dimensions if mapInfo is not primary
+            mapImageBg.onload = () => {
+                if (!mapInfo || !mapInfo.width || !mapInfo.height) { // If mapInfo didn't provide dimensions
+                    const mapWidth = mapImageBg.naturalWidth;
+                    const mapHeight = mapImageBg.naturalHeight;
+                    mapCanvas.width = mapWidth;
+                    mapCanvas.height = mapHeight;
+                    mapContainer.style.width = `${mapWidth}px`;
+                    mapContainer.style.height = `${mapHeight}px`;
+                    console.log("Map dimensions set from image background.");
+                }
+            };
+             mapImageBg.onerror = () => {
+                updateStatus('❌ Error loading map_image.png. Display may be incorrect.', 'danger');
+             };
+
+
+            function pixelToMapCoords(px, py) {
+                if (!mapInfo) {
+                    console.warn("Map info not available for pixelToMapCoords. Using pixel values as guess.");
+                    updateStatus('⚠️ Map info not loaded for coordinate conversion!', 'warning');
+                    return { x: px, y: py };
+                }
+                const mapX = mapInfo.origin_x + px * mapInfo.resolution;
+                const mapY = mapInfo.origin_y + (mapInfo.height - py) * mapInfo.resolution;
+                return { x: mapX, y: mapY };
+            }
+
+            function clearCanvas() {
+                mapCtx.clearRect(0, 0, mapCanvas.width, mapCanvas.height);
+            }
+
+            function drawArrow(fromx, fromy, tox, toy) {
+                clearCanvas();
+                mapCtx.strokeStyle = 'red';
+                mapCtx.lineWidth = 3;
+                mapCtx.beginPath();
+                mapCtx.moveTo(fromx, fromy);
+                mapCtx.lineTo(tox, toy);
+                mapCtx.stroke();
+
+                const headlen = 12;
+                const dx = tox - fromx;
+                const dy = toy - fromy;
+                const angle = Math.atan2(dy, dx);
+                mapCtx.beginPath();
+                mapCtx.moveTo(tox, toy);
+                mapCtx.lineTo(tox - headlen * Math.cos(angle - Math.PI / 6), toy - headlen * Math.sin(angle - Math.PI / 6));
+                mapCtx.moveTo(tox, toy);
+                mapCtx.lineTo(tox - headlen * Math.cos(angle + Math.PI / 6), toy - headlen * Math.sin(angle + Math.PI / 6));
+                mapCtx.stroke();
+            }
+
+            mapCanvas.addEventListener('mousedown', (e) => {
+                if (!isDrawingGoal) return;
+                const rect = mapCanvas.getBoundingClientRect();
+                navGoalStartPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                e.preventDefault(); // Prevent text selection, etc.
+            });
+
+            mapCanvas.addEventListener('mousemove', (e) => {
+                if (!isDrawingGoal || !navGoalStartPoint) return;
+                const rect = mapCanvas.getBoundingClientRect();
+                const currentX = e.clientX - rect.left;
+                const currentY = e.clientY - rect.top;
+
+                let dx = currentX - navGoalStartPoint.x;
+                let dy = currentY - navGoalStartPoint.y;
+                let angle = Math.atan2(dy, dx);
+                
+                let endX = navGoalStartPoint.x + FIXED_ARROW_LENGTH * Math.cos(angle);
+                let endY = navGoalStartPoint.y + FIXED_ARROW_LENGTH * Math.sin(angle);
+
+                drawArrow(navGoalStartPoint.x, navGoalStartPoint.y, endX, endY);
+            });
+
+            mapCanvas.addEventListener('mouseup', (e) => {
+                if (!isDrawingGoal || !navGoalStartPoint) return;
+                const rect = mapCanvas.getBoundingClientRect();
+                const endPixelX = e.clientX - rect.left;
+                const endPixelY = e.clientY - rect.top;
+
+                const startCoords = pixelToMapCoords(navGoalStartPoint.x, navGoalStartPoint.y);
+                if (!mapInfo) { // Check if conversion was possible
+                    isDrawingGoal = false; // Reset drawing state
+                    document.getElementById('nav-goal-btn').classList.remove('active');
+                    mapCanvas.classList.remove('drawing-active');
+                    document.getElementById('map-hint').style.display = 'none';
+                    clearCanvas();
+                    return; // Exit if mapInfo isn't loaded
+                }
+
+
+                let dx_pixel = endPixelX - navGoalStartPoint.x;
+                let dy_pixel = endPixelY - navGoalStartPoint.y;
+                const angleRad = Math.atan2(dy_pixel, dx_pixel);
+
+                publishGoal(startCoords.x, startCoords.y, angleRad);
+                updateStatus(`Goal sent: At (${startCoords.x.toFixed(2)}, ${startCoords.y.toFixed(2)}), Angle: ${angleRad.toFixed(2)} rad`, 'success');
+
+                isDrawingGoal = false;
+                navGoalStartPoint = null;
+                document.getElementById('nav-goal-btn').classList.remove('active');
+                mapCanvas.classList.remove('drawing-active');
+                document.getElementById('map-hint').style.display = 'none';
+                setTimeout(clearCanvas, 200);
+            });
+            
+            mapCanvas.addEventListener('mouseleave', (e) => { // If mouse leaves canvas while drawing
+                if (isDrawingGoal && navGoalStartPoint) {
+                    // Optionally, cancel drawing or complete with current point
+                    // For simplicity, we'll just clear the temporary arrow
+                    navGoalStartPoint = null; // Reset start point to prevent accidental goal on re-entry if mouseup was missed
+                    clearCanvas();
+                }
+            });
+
+
+            function publishGoal(x, y, angleRad) {
+                if (!ros || !ros.isConnected) {
+                    updateStatus('Not connected to ROS! Cannot send goal.', 'danger');
+                    return;
+                }
+                const goalMsg = new ROSLIB.Message({
+                    header: {
+                        stamp: { secs: Math.floor(Date.now() / 1000), nsecs: (Date.now() % 1000) * 1e6 },
+                        frame_id: 'map' // Make sure this frame_id is correct for your setup
+                    },
+                    pose: {
+                        position: { x: parseFloat(x), y: parseFloat(y), z: 0.0 },
+                        orientation: {
+                            x: 0.0, y: 0.0,
+                            z: Math.sin(angleRad / 2),
+                            w: Math.cos(angleRad / 2)
+                        }
+                    }
+                });
+                goalPub.publish(goalMsg);
+                console.log('Goal published:', goalMsg);
+            }
+
+            function publishTwist(linearX, angularZ) {
+                if (!ros || !ros.isConnected) {
+                    console.warn('Cannot publish Twist: Not connected to ROS!');
+                    return;
+                }
+                const twistMsg = new ROSLIB.Message({
+                    linear: { x: parseFloat(linearX), y: 0.0, z: 0.0 },
+                    angular: { x: 0.0, y: 0.0, z: parseFloat(angularZ) }
+                });
+                twistPub.publish(twistMsg);
+            }
+
+            function stopRobot() {
+                isMovingGlobal = false;
+                publishTwist(0.0, 0.0);
+                console.log('Robot stop command sent.');
+                updateStatus('EMERGENCY STOP ACTIVATED. Robot stopped.', 'danger');
+                const stopBtn = document.getElementById('emergency-stop-btn');
+                stopBtn.classList.add('stopped');
+                stopBtn.innerHTML = '<i class="fas fa-play"></i> Resume';
+            }
+            
+            function resumeRobot() {
+                isMovingGlobal = true;
+                updateStatus('Movement resumed (if a process was active). Any new command will proceed.', 'info');
+                const stopBtn = document.getElementById('emergency-stop-btn');
+                stopBtn.classList.remove('stopped');
+                stopBtn.innerHTML = '<i class="fas fa-stop"></i> Emergency Stop';
+            }
+
+            const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+            async function mpcMoveTo(targetX, targetY, targetTheta = null) {
+                let isSpecificTaskMoving = true; // Local flag for this specific mpcMoveTo task
+                const Kp_linear = 0.3;
+                const Kp_angular = 0.8;
+                const distance_tolerance = 0.15;
+                const angle_tolerance = 0.15; // Radians
+                const max_linear_vel = 0.3;
+                const max_angular_vel = 0.7;
+
+                console.log(`MPC: Moving to (${targetX.toFixed(2)}, ${targetY.toFixed(2)})` + (targetTheta ? `, Angle: ${targetTheta.toFixed(2)}` : ''));
+
+                while (isMovingGlobal && isSpecificTaskMoving) {
+                    if (!currentPose) {
+                        console.log("MPC: Waiting for current pose...");
+                        await sleep(100);
+                        continue;
+                    }
+
+                    const { position, orientation } = currentPose;
+                    const currentX = position.x;
+                    const currentY = position.y;
+                    const q = orientation;
+                    const currentTheta = Math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+
+                    const dx = targetX - currentX;
+                    const dy = targetY - currentY;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+
+                    if (distance < distance_tolerance) {
+                        if (targetTheta !== null) {
+                            let angle_diff = targetTheta - currentTheta;
+                            while (angle_diff > Math.PI) angle_diff -= 2 * Math.PI;
+                            while (angle_diff < -Math.PI) angle_diff += 2 * Math.PI;
+
+                            if (Math.abs(angle_diff) < angle_tolerance) {
+                                console.log(`MPC: Reached target and orientation.`);
+                                isSpecificTaskMoving = false; // Task complete
+                                break;
+                            }
+                            let omega_final = Kp_angular * angle_diff;
+                            omega_final = Math.max(-max_angular_vel, Math.min(max_angular_vel, omega_final));
+                            publishTwist(0, omega_final);
+                        } else {
+                            console.log(`MPC: Reached target point.`);
+                            isSpecificTaskMoving = false; // Task complete
+                            break;
+                        }
+                    } else {
+                        const angle_to_goal = Math.atan2(dy, dx);
+                        let angle_error = angle_to_goal - currentTheta;
+                        while (angle_error > Math.PI) angle_error -= 2 * Math.PI;
+                        while (angle_error < -Math.PI) angle_error += 2 * Math.PI;
+
+                        let v = Kp_linear * distance;
+                        let omega = Kp_angular * angle_error;
+                        
+                        v = Math.max(-max_linear_vel, Math.min(max_linear_vel, v)); 
+                        omega = Math.max(-max_angular_vel, Math.min(max_angular_vel, omega));
+
+                        // If large angle error, prioritize turning
+                        if (Math.abs(angle_error) > Math.PI / 4) { // e.g. > 45 degrees
+                            v = v * 0.3; // Reduce linear speed while turning sharply
+                        }
+                        publishTwist(v, omega);
+                    }
+                    await sleep(100);
+                }
+                if (!isMovingGlobal) console.log("MPC: Global movement stop received.");
+                if (!isSpecificTaskMoving && isMovingGlobal) console.log("MPC: Task finished normally.");
+                publishTwist(0,0); // Stop robot at the end of this specific task or if globally stopped
+            }
+            
+            async function loadPathDrawnJson() {
+                try {
+                    const response = await fetch('database_json/path_drawn.json'); // Ensure this path is correct
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}, file: database_json/path_drawn.json`);
+                    return await response.json();
+                } catch (e) {
+                    console.error("Failed to load path_drawn.json:", e);
+                    updateStatus("Error: Could not load path_drawn.json. Movement commands for paths/splines will fail.", 'danger');
+                    return null;
+                }
+            }
+
+            async function executeMovementSequence(actionName, pathItemFilter, pointExtractor, movementLogic) {
+                updateStatus(`🏃‍♂️ Starting ${actionName}...`, 'info');
+                const pathData = await loadPathDrawnJson();
+                if (!pathData) return;
+
+                const items = pathData.filter(pathItemFilter);
+                if (items.length === 0) {
+                    updateStatus(`⚠️ No valid '${actionName}' data found in path_drawn.json`, 'warning');
+                    return;
+                }
+
+                for (const item of items) {
+                    if (!isMovingGlobal) break;
+                    const points = pointExtractor(item);
+                    if (!points || points.length === 0) continue;
+                    
+                    await movementLogic(item, points); // Pass whole item if needed by specific logic
+                }
+
+                if (isMovingGlobal) updateStatus(`✅ ${actionName} complete.`, 'success');
+                else updateStatus(`🛑 ${actionName} stopped.`, 'warning');
+                publishTwist(0,0); // Ensure robot is stopped
+            }
+
+            // Specific movement functions
+            async function moveAlongLine() {
+                await executeMovementSequence(
+                    "Line Movement",
+                    item => item.type === "line" || item.type === "polyline",
+                    item => {
+                        if (item.type === "line" && item.x && item.y) return item.x.map((x, i) => ({ x: x, y: item.y[i] }));
+                        if (item.type === "polyline" && item.points) return item.points.map(p => ({ x: p[0], y: p[1] }));
+                        return [];
+                    },
+                    async (item, points) => {
+                        for (const point of points) {
+                            if (!isMovingGlobal) break;
+                            await mpcMoveTo(point.x, point.y);
+                        }
+                    }
+                );
+            }
+            
+            async function moveAlongSpline(splineType) { // "spline3" or "spline5"
+                const minPoints = splineType === "spline3" ? 4 : 6;
+                 await executeMovementSequence(
+                    `Spline ${splineType.slice(-1)} Movement`,
+                    item => item.type === splineType && item.points && item.points.length >= minPoints,
+                    item => item.points.map(p => ({x: p[0], y: p[1]})), // Assuming points are [x,y]
+                    async (item, points) => {
+                         // Simplified: Move to each control point. Real spline following is much more complex.
+                        for (const point of points) {
+                            if (!isMovingGlobal) break;
+                            console.log(`Moving to ${splineType} control point: ${point.x}, ${point.y}`);
+                            await mpcMoveTo(point.x, point.y);
+                        }
+                    }
+                );
+            }
+            
+            async function moveAlongArc() {
+                await executeMovementSequence(
+                    "Arc Movement",
+                    item => item.type === "arc",
+                    item => [item], // Arc item itself contains all info, wrap in array for consistency
+                    async (item) => { // item here is the arcItem directly
+                        const { start_x, start_y, center_x, center_y, radius, start_angle, end_angle } = item;
+                        if (!isMovingGlobal) return;
+                        await mpcMoveTo(start_x, start_y);
+
+                        // Placeholder for true arc MPC. Move to a mid-point and end-point.
+                        if (!isMovingGlobal) return;
+                        const mid_angle = (start_angle + end_angle) / 2;
+                        const mid_x = center_x + radius * Math.cos(mid_angle);
+                        const mid_y = center_y + radius * Math.sin(mid_angle);
+                        await mpcMoveTo(mid_x, mid_y);
+                        
+                        if (!isMovingGlobal) return;
+                        const final_x = center_x + radius * Math.cos(end_angle);
+                        const final_y = center_y + radius * Math.sin(end_angle);
+                        await mpcMoveTo(final_x, final_y);
+                    }
+                );
+            }
+
+            async function moveAlongFullPath() {
+                updateStatus(`🏃‍♂️ Starting Full Path Movement...`, 'info');
+                const pathData = await loadPathDrawnJson();
+                if (!pathData || pathData.length === 0) {
+                    updateStatus("⚠️ Path data is empty or not loaded for Full Path.", 'warning');
+                    return;
+                }
+
+                for (const item of pathData) {
+                    if (!isMovingGlobal) break;
+                    updateStatus(`Processing path item: ${item.type}`, 'info');
+                    console.log(`Full Path: Processing item:`, item);
+
+                    if (item.type === "line" || item.type === "polyline") {
+                        let points = [];
+                        if (item.type === "line" && item.x && item.y) points = item.x.map((x, i) => ({ x: x, y: item.y[i] }));
+                        else if (item.type === "polyline" && item.points) points = item.points.map(p => ({ x: p[0], y: p[1] }));
+                        for (const point of points) {
+                            if (!isMovingGlobal) break; await mpcMoveTo(point.x, point.y);
+                        }
+                    } else if (item.type === "spline3" || item.type === "spline5") {
+                        const points = item.points.map(p => ({x: p[0], y: p[1]}));
+                        for (const point of points) {
+                            if (!isMovingGlobal) break; await mpcMoveTo(point.x, point.y);
+                        }
+                    } else if (item.type === "arc") {
+                        const { start_x, start_y, center_x, center_y, radius, start_angle, end_angle } = item;
+                        if (!isMovingGlobal) break; await mpcMoveTo(start_x, start_y);
+                        const mid_angle = (start_angle + end_angle) / 2;
+                        const mid_x = center_x + radius * Math.cos(mid_angle);
+                        const mid_y = center_y + radius * Math.sin(mid_angle);
+                        if (!isMovingGlobal) break; await mpcMoveTo(mid_x, mid_y);
+                        const final_x = center_x + radius * Math.cos(end_angle);
+                        const final_y = center_y + radius * Math.sin(end_angle);
+                        if (!isMovingGlobal) break; await mpcMoveTo(final_x, final_y);
+                    }
+                    if (!isMovingGlobal) break;
+                }
+                
+                if (isMovingGlobal) updateStatus("✅ Full path movement complete.", 'success');
+                else updateStatus("🛑 Full path movement stopped.", 'warning');
+                publishTwist(0,0);
+            }
+
+
+            // Event Listeners
+            document.getElementById('send-goal-btn').addEventListener('click', () => {
+                goalModal.show();
+            });
+
+            document.getElementById('send-goal-modal-btn').addEventListener('click', () => {
+                const x = document.getElementById('goal-x').value;
+                const y = document.getElementById('goal-y').value;
+                const angle = document.getElementById('goal-angle').value;
+                if (x !== "" && y !== "" && angle !== "") {
+                    publishGoal(parseFloat(x), parseFloat(y), parseFloat(angle));
+                    updateStatus(`Manual Goal sent: (${x}, ${y}), Angle: ${angle} rad`, 'success');
+                    goalModal.hide();
+                } else {
+                    alert('Please fill all goal fields.');
+                }
+            });
+
+            document.getElementById('nav-goal-btn').addEventListener('click', (e) => {
+                isDrawingGoal = !isDrawingGoal;
+                if (isDrawingGoal) {
+                    if (!mapInfo) {
+                        updateStatus('⚠️ Cannot enable 2D Nav Goal: Map information (map_image.json) is not loaded. Please check console.', 'danger');
+                        isDrawingGoal = false; // Disable it back
+                        return;
+                    }
+                    e.target.classList.add('active');
+                    mapCanvas.classList.add('drawing-active');
+                    document.getElementById('map-hint').style.display = 'block';
+                    updateStatus("✏️ Drawing mode active. Click and drag on map to send goal.", 'info');
+                } else {
+                    e.target.classList.remove('active');
+                    mapCanvas.classList.remove('drawing-active');
+                    document.getElementById('map-hint').style.display = 'none';
+                    clearCanvas();
+                    updateStatus("Drawing mode deactivated.", 'info');
+                }
+            });
+
+            document.getElementById('emergency-stop-btn').addEventListener('click', (e) => {
+                if (isMovingGlobal) stopRobot();
+                else resumeRobot();
+            });
+
+            function setupMovementButton(buttonId, actionFunction, modalTitle) {
+                document.getElementById(buttonId).addEventListener('click', () => {
+                    currentMovementAction = actionFunction;
+                    document.getElementById('movementModalTitle').textContent = `Confirm: ${modalTitle}`;
+                    document.getElementById('movementModalBodyText').textContent = `Do you want to start "${modalTitle}"?`;
+                    movementParamsModal.show();
+                });
+            }
+            
+            document.getElementById('start-movement-modal-btn').addEventListener('click', () => {
+                if (currentMovementAction) {
+                    if (!isMovingGlobal) resumeRobot(); // If globally stopped, resume before starting new action
+
+                    // Ensure the stop button is in the "stop" state
+                    const stopBtn = document.getElementById('emergency-stop-btn');
+                    stopBtn.classList.remove('stopped');
+                    stopBtn.innerHTML = '<i class="fas fa-stop"></i> Emergency Stop';
+                    isMovingGlobal = true; // Explicitly set for the new action
+
+                    currentMovementAction();
+                }
+                movementParamsModal.hide();
+            });
+
+            setupMovementButton('move-line-btn', moveAlongLine, 'Move Along Line');
+            setupMovementButton('move-arc-btn', moveAlongArc, 'Move Along Arc');
+            setupMovementButton('move-path-btn', moveAlongFullPath, 'Move Along Full Path');
+            setupMovementButton('move-spline3-btn', () => moveAlongSpline('spline3'), 'Move Along Spline 3');
+            setupMovementButton('move-spline5-btn', () => moveAlongSpline('spline5'), 'Move Along Spline 5');
+
+            function refreshOverlayImages() {
+                const imagesToRefresh = [
+                    'lidar-f-image', 'lidar-b-image', 'path-image', 
+                    'robot-image', 'paths-image', 'costmap-image'
+                ];
+                imagesToRefresh.forEach(id => {
+                    const imgElement = document.getElementById(id);
+                    if (imgElement && imgElement.src) { // Check if src exists
+                        const baseSrc = imgElement.src.split('?')[0];
+                        imgElement.src = `${baseSrc}?t=${new Date().getTime()}`;
+                    }
+                });
+            }
+            setInterval(refreshOverlayImages, 3000); // Refresh images e.g. every 3 seconds
+
+            async function init() {
+                updateStatus("Initializing...", "info");
+                await loadMapInfo(); // Load map metadata first
+                connectROS();       // Then connect to ROS
+                clearCanvas();
+                refreshOverlayImages();
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
