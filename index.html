@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>2D Drawing Tool</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        margin: 0;
+        padding: 0;
+        background-color: #f0f0f0;
+      }
+
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+
+      h1 {
+        color: #2c3e50;
+        margin-bottom: 10px;
+      }
+
+      .subtitle {
+        color: #7f8c8d;
+        margin-bottom: 20px;
+      }
+
+      .toolbar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+      }
+
+      .tool-button {
+        background-color: #3498db;
+        color: white;
+        border: none;
+        padding: 8px 15px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-weight: bold;
+        transition: background-color 0.3s;
+      }
+
+      .tool-button:hover {
+        background-color: #2980b9;
+      }
+
+      .tool-button.active {
+        background-color: #2980b9;
+        box-shadow: 0 0 5px rgba(0, 0, 0, 0.3) inset;
+      }
+
+      .canvas-container {
+        position: relative;
+        border: 2px solid #2c3e50;
+        overflow: hidden;
+        background-color: white;
+      }
+
+      #drawing-canvas {
+        cursor: crosshair;
+        display: block;
+      }
+
+      .status-bar {
+        margin-top: 10px;
+        color: #00bcd4;
+        font-size: 14px;
+      }
+
+      .snap-controls {
+        display: flex;
+        align-items: center;
+        margin: 10px 0;
+        gap: 15px;
+      }
+
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 50px;
+        height: 24px;
+      }
+
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+
+      .slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background-color: #ccc;
+        transition: 0.4s;
+        border-radius: 24px;
+      }
+
+      .slider:before {
+        position: absolute;
+        content: "";
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background-color: white;
+        transition: 0.4s;
+        border-radius: 50%;
+      }
+
+      input:checked + .slider {
+        background-color: #2196f3;
+      }
+
+      input:checked + .slider:before {
+        transform: translateX(26px);
+      }
+
+      .coordinates {
+        position: absolute;
+        bottom: 5px;
+        left: 5px;
+        background-color: rgba(255, 255, 255, 0.7);
+        padding: 2px 5px;
+        border-radius: 3px;
+        font-size: 12px;
+        pointer-events: none;
+      }
+
+      .snap-label {
+        font-weight: bold;
+      }
+
+      .snap-options {
+        display: flex;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+
+      .snap-option {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+      }
+
+      .snap-option label {
+        font-size: 14px;
+      }
+
+      .fillet-controls {
+        display: flex;
+        align-items: center;
+        margin: 10px 0;
+        gap: 15px;
+      }
+
+      .fillet-radius {
+        width: 60px;
+        padding: 5px;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+      }
+
+      .selected-path {
+        stroke: #ff9800 !important;
+        stroke-width: 3px !important;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>DRAW</h1>
+      <p class="subtitle">Edit and draw the map.</p>
+
+      <div class="toolbar">
+        <button class="tool-button" id="line-tool">✏️LINE</button>
+        <button class="tool-button" id="polyline-tool">📏POLYLINE</button>
+        <button class="tool-button" id="arc-tool">🧲ARC</button>
+        <button class="tool-button" id="spline3-tool">📈SPLINE 3</button>
+        <button class="tool-button" id="spline5-tool">📉SPLINE 5</button>
+        <button class="tool-button" id="fillet-tool">🔄FILLET</button>
+        <button class="tool-button" id="save-tool">💾SAVE</button>
+        <button class="tool-button" id="clear-tool">🧹CLEAR</button>
+        <button class="tool-button" id="clear-data-tool">🗑️CLEAR DATA</button>
+      </div>
+
+      <div class="fillet-controls" id="fillet-controls" style="display: none">
+        <span class="snap-label">Fillet Radius:</span>
+        <input
+          type="number"
+          id="fillet-radius"
+          class="fillet-radius"
+          value="1"
+          min="0.1"
+          step="0.1"
+        />
+        <span class="snap-label">(Select two connected lines)</span>
+      </div>
+
+      <div class="snap-controls">
+        <div class="snap-option">
+          <span class="snap-label">Auto-Snap:</span>
+          <label class="switch">
+            <input type="checkbox" id="snap-toggle" checked />
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="snap-options">
+          <div class="snap-option">
+            <input type="checkbox" id="snap-endpoint" checked />
+            <label for="snap-endpoint">Endpoint</label>
+          </div>
+          <div class="snap-option">
+            <input type="checkbox" id="snap-midpoint" />
+            <label for="snap-midpoint">Midpoint</label>
+          </div>
+          <div class="snap-option">
+            <input type="checkbox" id="snap-intersection" />
+            <label for="snap-intersection">Intersection</label>
+          </div>
+          <div class="snap-option">
+            <input type="checkbox" id="snap-grid" />
+            <label for="snap-grid">Grid</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="canvas-container">
+        <canvas id="drawing-canvas" width="1000" height="600"></canvas>
+        <div class="coordinates" id="coordinates">0, 0</div>
+      </div>
+
+      <div class="status-bar" id="status-bar">
+        The map is ready for your work.
+      </div>
+    </div>
+
+    <script>
+      // Canvas setup
+      const canvas = document.getElementById("drawing-canvas");
+      const ctx = canvas.getContext("2d");
+      const coordsDisplay = document.getElementById("coordinates");
+      const statusBar = document.getElementById("status-bar");
+      const filletControls = document.getElementById("fillet-controls");
+
+      // Tools and state
+      const tools = document.querySelectorAll(".tool-button");
+      let activeTool = "line-tool";
+      let drawing = false;
+      let currentPath = [];
+      let allPaths = [];
+      let tempPoint = null;
+      let snapPoint = null;
+
+      // Fillet related variables
+      let selectedPaths = [];
+      let filletRadius = 1;
+
+      // Grid and canvas settings
+      const gridSize = 20;
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+      const offsetX = 50;
+      const offsetY = 50;
+      const scaleFactor = 20; // 1 unit = 20 pixels
+
+      // Event listeners for fillet options
+      const filletRadiusInput = document.getElementById("fillet-radius");
+      filletRadiusInput.addEventListener("change", () => {
+        filletRadius = parseFloat(filletRadiusInput.value);
+        if (isNaN(filletRadius) || filletRadius <= 0) {
+          filletRadius = 0.1;
+          filletRadiusInput.value = 0.1;
+        }
+      });
+      // Convert canvas coordinates to grid coordinates
+      function canvasToGrid(x, y) {
+        return {
+          x: (x - offsetX) / scaleFactor,
+          y: (canvasHeight - y - offsetY) / scaleFactor,
+        };
+      }
+
+      // Convert grid coordinates to canvas coordinates
+      function gridToCanvas(x, y) {
+        return {
+          x: x * scaleFactor + offsetX,
+          y: canvasHeight - (y * scaleFactor + offsetY),
+        };
+      }
+
+      // Draw the grid
+      function drawGrid() {
+        ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+        // Set line style for grid
+        ctx.strokeStyle = "#e0e0e0";
+        ctx.lineWidth = 0.5;
+
+        // Draw vertical grid lines
+        for (let x = 0; x <= canvasWidth; x += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(x, 0);
+          ctx.lineTo(x, canvasHeight);
+          ctx.stroke();
+        }
+
+        // Draw horizontal grid lines
+        for (let y = 0; y <= canvasHeight; y += gridSize) {
+          ctx.beginPath();
+          ctx.moveTo(0, y);
+          ctx.lineTo(canvasWidth, y);
+          ctx.stroke();
+        }
+
+        // Draw axis
+        ctx.strokeStyle = "#a0a0a0";
+        ctx.lineWidth = 1;
+
+        // X-axis
+        ctx.beginPath();
+        ctx.moveTo(offsetX, canvasHeight - offsetY);
+        ctx.lineTo(canvasWidth, canvasHeight - offsetY);
+        ctx.stroke();
+
+        // Y-axis
+        ctx.beginPath();
+        ctx.moveTo(offsetX, 0);
+        ctx.lineTo(offsetX, canvasHeight - offsetY);
+        ctx.stroke();
+
+        // Draw axis labels
+        ctx.fillStyle = "#666";
+        ctx.font = "12px Arial";
+
+        // X-axis labels
+        for (let x = 0; x <= (canvasWidth - offsetX) / scaleFactor; x += 5) {
+          const canvasX = gridToCanvas(x, 0).x;
+          ctx.fillText(x, canvasX - 3, canvasHeight - offsetY + 15);
+        }
+
+        // Y-axis labels
+        for (let y = 0; y <= (canvasHeight - offsetY) / scaleFactor; y += 5) {
+          const canvasY = gridToCanvas(0, y).y;
+          ctx.fillText(y, offsetX - 25, canvasY + 4);
+        }
+      }
+
+      // Find snap points
+      function findSnapPoint(x, y) {
+        if (!document.getElementById("snap-toggle").checked) {
+          return null;
+        }
+
+        const snapRadius = 10;
+        const mousePoint = {
+          x,
+          y,
+        };
+        let closestPoint = null;
+        let minDistance = snapRadius;
+
+        // Snap to grid
+        if (document.getElementById("snap-grid").checked) {
+          const gridX =
+            Math.round((x - offsetX) / gridSize) * gridSize + offsetX;
+          const gridY = Math.round(y / gridSize) * gridSize;
+          const gridDist = Math.sqrt(
+            Math.pow(gridX - x, 2) + Math.pow(gridY - y, 2)
+          );
+
+          if (gridDist < minDistance) {
+            minDistance = gridDist;
+            closestPoint = {
+              x: gridX,
+              y: gridY,
+              type: "grid",
+            };
+          }
+        }
+
+        // Check for endpoint snap
+        if (document.getElementById("snap-endpoint").checked) {
+          allPaths.forEach((path) => {
+            if (path.points.length > 0) {
+              // First point
+              const firstPoint = path.points[0];
+              const distFirst = Math.sqrt(
+                Math.pow(firstPoint.x - mousePoint.x, 2) +
+                  Math.pow(firstPoint.y - mousePoint.y, 2)
+              );
+
+              if (distFirst < minDistance) {
+                minDistance = distFirst;
+                closestPoint = {
+                  x: firstPoint.x,
+                  y: firstPoint.y,
+                  type: "endpoint",
+                };
+              }
+
+              // Last point
+              const lastPoint = path.points[path.points.length - 1];
+              const distLast = Math.sqrt(
+                Math.pow(lastPoint.x - mousePoint.x, 2) +
+                  Math.pow(lastPoint.y - mousePoint.y, 2)
+              );
+
+              if (distLast < minDistance) {
+                minDistance = distLast;
+                closestPoint = {
+                  x: lastPoint.x,
+                  y: lastPoint.y,
+                  type: "endpoint",
+                };
+              }
+            }
+          });
+        }
+
+        // Check for midpoint snap
+        if (document.getElementById("snap-midpoint").checked) {
+          allPaths.forEach((path) => {
+            if (path.type === "line" && path.points.length >= 2) {
+              for (let i = 0; i < path.points.length - 1; i++) {
+                const p1 = path.points[i];
+                const p2 = path.points[i + 1];
+                const midX = (p1.x + p2.x) / 2;
+                const midY = (p1.y + p2.y) / 2;
+                const distMid = Math.sqrt(
+                  Math.pow(midX - mousePoint.x, 2) +
+                    Math.pow(midY - mousePoint.y, 2)
+                );
+
+                if (distMid < minDistance) {
+                  minDistance = distMid;
+                  closestPoint = {
+                    x: midX,
+                    y: midY,
+                    type: "midpoint",
+                  };
+                }
+              }
+            }
+          });
+        }
+
+        // Check for intersection snap
+        if (document.getElementById("snap-intersection").checked) {
+          // Simplified version - just check direct line intersections
+          for (let i = 0; i < allPaths.length; i++) {
+            for (let j = i + 1; j < allPaths.length; j++) {
+              if (allPaths[i].type === "line" && allPaths[j].type === "line") {
+                for (let pi = 0; pi < allPaths[i].points.length - 1; pi++) {
+                  for (let pj = 0; pj < allPaths[j].points.length - 1; pj++) {
+                    const line1 = {
+                      x1: allPaths[i].points[pi].x,
+                      y1: allPaths[i].points[pi].y,
+                      x2: allPaths[i].points[pi + 1].x,
+                      y2: allPaths[i].points[pi + 1].y,
+                    };
+
+                    const line2 = {
+                      x1: allPaths[j].points[pj].x,
+                      y1: allPaths[j].points[pj].y,
+                      x2: allPaths[j].points[pj + 1].x,
+                      y2: allPaths[j].points[pj + 1].y,
+                    };
+
+                    const intersection = findLineIntersection(line1, line2);
+
+                    if (intersection) {
+                      const distIntersection = Math.sqrt(
+                        Math.pow(intersection.x - mousePoint.x, 2) +
+                          Math.pow(intersection.y - mousePoint.y, 2)
+                      );
+
+                      if (distIntersection < minDistance) {
+                        minDistance = distIntersection;
+                        closestPoint = {
+                          x: intersection.x,
+                          y: intersection.y,
+                          type: "intersection",
+                        };
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+
+        return closestPoint;
+      }
+
+      // Find line intersection
+      function findLineIntersection(line1, line2) {
+        const x1 = line1.x1,
+          y1 = line1.y1,
+          x2 = line1.x2,
+          y2 = line1.y2;
+        const x3 = line2.x1,
+          y3 = line2.y1,
+          x4 = line2.x2,
+          y4 = line2.y2;
+
+        const denominator = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+
+        // Lines are parallel or coincident
+        if (denominator === 0) {
+          return null;
+        }
+
+        const ua =
+          ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / denominator;
+        const ub =
+          ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / denominator;
+
+        // Check if intersection is on both line segments
+        if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+          const x = x1 + ua * (x2 - x1);
+          const y = y1 + ua * (y2 - y1);
+          return {
+            x,
+            y,
+          };
+        }
+
+        return null;
+      }
+
+      // Calculate distance between two points
+      function distance(p1, p2) {
+        return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+      }
+
+      // Calculate distance from point to line segment
+      function distanceToLineSegment(point, line) {
+        const { x, y } = point;
+        const { x1, y1, x2, y2 } = line;
+
+        const A = x - x1;
+        const B = y - y1;
+        const C = x2 - x1;
+        const D = y2 - y1;
+
+        const dot = A * C + B * D;
+        const len_sq = C * C + D * D;
+        let param = -1;
+
+        if (len_sq !== 0) {
+          param = dot / len_sq;
+        }
+
+        let xx, yy;
+
+        if (param < 0) {
+          xx = x1;
+          yy = y1;
+        } else if (param > 1) {
+          xx = x2;
+          yy = y2;
+        } else {
+          xx = x1 + param * C;
+          yy = y1 + param * D;
+        }
+
+        const dx = x - xx;
+        const dy = y - yy;
+
+        return Math.sqrt(dx * dx + dy * dy);
+      }
+
+      // Find nearest line segment to a point
+      function findNearestLine(x, y) {
+        const mousePoint = {
+          x,
+          y,
+        };
+        let closestDist = Infinity;
+        let closestPath = null;
+        let closestSegmentIndex = -1;
+
+        allPaths.forEach((path, pathIndex) => {
+          if (path.type === "line" && path.points.length >= 2) {
+            for (let i = 0; i < path.points.length - 1; i++) {
+              const p1 = path.points[i];
+              const p2 = path.points[i + 1];
+              const line = {
+                x1: p1.x,
+                y1: p1.y,
+                x2: p2.x,
+                y2: p2.y,
+              };
+
+              const dist = distanceToLineSegment(mousePoint, line);
+
+              if (dist < closestDist && dist < 10) {
+                // 10 pixels tolerance
+                closestDist = dist;
+                closestPath = path;
+                closestPath.index = pathIndex;
+                closestSegmentIndex = i;
+              }
+            }
+          }
+        });
+
+        return closestPath
+          ? {
+              path: closestPath,
+              segmentIndex: closestSegmentIndex,
+            }
+          : null;
+      }
+
+      // Find common point between two lines
+      function findCommonPoint(line1, line2) {
+        // Check if lines share a point
+        for (let i = 0; i < line1.points.length; i++) {
+          for (let j = 0; j < line2.points.length; j++) {
+            const p1 = line1.points[i];
+            const p2 = line2.points[j];
+
+            if (
+              Math.abs(p1.x - p2.x) < 0.001 &&
+              Math.abs(p1.y - p2.y) < 0.001
+            ) {
+              return {
+                point: p1,
+                index1: i,
+                index2: j,
+              };
+            }
+          }
+        }
+
+        return null;
+      }
+
+      // Calculate fillet between two lines
+      function calculateFillet() {
+        if (selectedPaths.length !== 2) return null;
+
+        const selectedLine1 = selectedPaths[0];
+        const selectedLine2 = selectedPaths[1];
+        const line1 = selectedLine1.path;
+        const line2 = selectedLine2.path;
+
+        const commonPointInfo = findCommonPoint(line1, line2);
+        if (!commonPointInfo) {
+          statusBar.textContent = "Selected lines don't share a corner point!";
+          return null;
+        }
+
+        const { point: corner, index1, index2 } = commonPointInfo;
+
+        const p1 = index1 === 0 ? line1.points[1] : line1.points[index1 - 1];
+        const p2 = index2 === 0 ? line2.points[1] : line2.points[index2 - 1];
+
+        const v1 = { x: p1.x - corner.x, y: p1.y - corner.y };
+        const v2 = { x: p2.x - corner.x, y: p2.y - corner.y };
+
+        const len1 = Math.hypot(v1.x, v1.y);
+        const len2 = Math.hypot(v2.x, v2.y);
+
+        const n1 = { x: v1.x / len1, y: v1.y / len1 };
+        const n2 = { x: v2.x / len2, y: v2.y / len2 };
+
+        const radius =
+          parseFloat(document.getElementById("fillet-radius").value) *
+          scaleFactor;
+
+        // Giới hạn bán kính nếu đoạn ngắn
+        const maxTangent = Math.min(len1, len2) * 0.4;
+        const tangent = Math.min(
+          radius / Math.tan(Math.acos(n1.x * n2.x + n1.y * n2.y) / 2),
+          maxTangent
+        );
+
+        const p1Trim = {
+          x: corner.x + n1.x * tangent,
+          y: corner.y + n1.y * tangent,
+        };
+        const p2Trim = {
+          x: corner.x + n2.x * tangent,
+          y: corner.y + n2.y * tangent,
+        };
+
+        // Tính điểm điều khiển (control point) nằm ở giữa hai điểm trim, nhưng hướng ra ngoài (vuông góc)
+        const mid = {
+          x: (p1Trim.x + p2Trim.x) / 2,
+          y: (p1Trim.y + p2Trim.y) / 2,
+        };
+
+        // Vector tiếp tuyến tại điểm giữa
+        const tangentVec = {
+          x: p2Trim.x - p1Trim.x,
+          y: p2Trim.y - p1Trim.y,
+        };
+
+        // Pháp tuyến (vuông góc)
+        const normal = {
+          x: -tangentVec.y,
+          y: tangentVec.x,
+        };
+        const normalLen = Math.hypot(normal.x, normal.y);
+        normal.x /= normalLen;
+        normal.y /= normalLen;
+
+        // Đảm bảo hướng ra ngoài (dựa vào cross product)
+        const cross = v1.x * v2.y - v1.y * v2.x;
+        const direction = cross < 0 ? -1 : 1;
+
+        // Đặt control point cách mid một đoạn tỉ lệ với bán kính
+        const controlPoint = {
+          x: mid.x + direction * normal.x * radius * 0.55,
+          y: mid.y + direction * normal.y * radius * 0.55,
+        };
+
+        return {
+          line1: {
+            ...line1,
+            newEndPoint: p1Trim,
+            cornerIndex: index1,
+          },
+          line2: {
+            ...line2,
+            newEndPoint: p2Trim,
+            cornerIndex: index2,
+          },
+          bezier: {
+            type: "path",
+            points: [p1Trim, controlPoint, p2Trim],
+            color: "#333",
+          },
+        };
+      }
+
+      // Apply fillet to the drawing
+      function applyFillet(filletData) {
+        if (!filletData) return;
+
+        const {
+          line1,
+          line2,
+          bezier, // Thay arc thành bezier
+        } = filletData;
+
+        // Create new paths for the trimmed lines
+        const newLine1 = {
+          type: "line",
+          points: [],
+          color: "#333",
+        };
+
+        const newLine2 = {
+          type: "line",
+          points: [],
+          color: "#333",
+        };
+
+        // First line
+        if (line1.cornerIndex === 0) {
+          newLine1.points.push(bezier.points[0]);
+          for (let i = 1; i < line1.points.length; i++) {
+            newLine1.points.push(line1.points[i]);
+          }
+        } else {
+          for (let i = 0; i < line1.cornerIndex; i++) {
+            newLine1.points.push(line1.points[i]);
+          }
+          newLine1.points.push(bezier.points[0]);
+        }
+
+        // Second line
+        if (line2.cornerIndex === 0) {
+          newLine2.points.push(bezier.points[2]);
+          for (let i = 1; i < line2.points.length; i++) {
+            newLine2.points.push(line2.points[i]);
+          }
+        } else {
+          for (let i = 0; i < line2.cornerIndex; i++) {
+            newLine2.points.push(line2.points[i]);
+          }
+          newLine2.points.push(bezier.points[2]);
+        }
+
+        // Create new path for the fillet
+        const newPath = {
+          type: "path",
+          points: bezier.points,
+          color: bezier.color,
+        };
+
+        // Remove the old lines
+        allPaths = allPaths.filter(
+          (path, index) => index !== line1.index && index !== line2.index
+        );
+
+        // Add the new geometry
+        allPaths.push(newLine1);
+        allPaths.push(newLine2);
+        allPaths.push(newPath);
+
+        // Clear selection
+        selectedPaths = [];
+
+        statusBar.textContent = "Fillet created successfully!";
+        render();
+      }
+
+      // Draw all paths
+      function drawPaths() {
+        allPaths.forEach((path, pathIndex) => {
+          if (path.points.length < 2) return;
+
+          const isSelected = selectedPaths.some(
+            (sp) => sp.path.index === pathIndex
+          );
+
+          ctx.beginPath();
+          ctx.strokeStyle = isSelected ? "#ff9800" : path.color || "#333";
+          ctx.lineWidth = isSelected ? 3 : 2;
+
+          ctx.moveTo(path.points[0].x, path.points[0].y);
+
+          if (path.type === "line" || path.type === "polyline") {
+            path.points.forEach((point) => {
+              ctx.lineTo(point.x, point.y);
+            });
+          } else if (path.type === "path" && path.points.length === 3) {
+            // Vẽ quadratic Bezier
+            ctx.beginPath();
+            ctx.moveTo(path.points[0].x, path.points[0].y);
+            ctx.quadraticCurveTo(
+              path.points[1].x,
+              path.points[1].y,
+              path.points[2].x,
+              path.points[2].y
+            );
+            ctx.stroke();
+          } else if (path.type === "arc" && path.points.length >= 3) {
+            // Simple 3-point arc
+            const p1 = path.points[0];
+            const p2 = path.points[1];
+            const p3 = path.points[2];
+
+            // Find center of circle passing through 3 points
+            const temp = p2.x * p2.x + p2.y * p2.y;
+            const bc = (p1.x * p1.x + p1.y * p1.y - temp) / 2;
+            const cd = (temp - p3.x * p3.x - p3.y * p3.y) / 2;
+            const det =
+              (p1.x - p2.x) * (p2.y - p3.y) - (p2.x - p3.x) * (p1.y - p2.y);
+
+            if (Math.abs(det) < 1e-6) {
+              // Points are collinear, draw a line instead
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p3.x, p3.y);
+            } else {
+              const cx = (bc * (p2.y - p3.y) - cd * (p1.y - p2.y)) / det;
+              const cy = ((p1.x - p2.x) * cd - (p2.x - p3.x) * bc) / det;
+              const radius = Math.sqrt(
+                Math.pow(p1.x - cx, 2) + Math.pow(p1.y - cy, 2)
+              );
+
+              // Find angles
+              const startAngle = Math.atan2(p1.y - cy, p1.x - cx);
+              const endAngle = Math.atan2(p3.y - cy, p3.x - cx);
+
+              // Draw arc
+              ctx.arc(cx, cy, radius, startAngle, endAngle);
+            }
+          } else if (
+            (path.type === "spline3" || path.type === "spline5") &&
+            path.points.length >= 2
+          ) {
+            // Draw a simple curve through points
+            ctx.moveTo(path.points[0].x, path.points[0].y);
+
+            for (let i = 1; i < path.points.length - 1; i++) {
+              const xc = (path.points[i].x + path.points[i + 1].x) / 2;
+              const yc = (path.points[i].y + path.points[i + 1].y) / 2;
+              ctx.quadraticCurveTo(path.points[i].x, path.points[i].y, xc, yc);
+            }
+
+            // Last curve segment
+            const last = path.points.length - 1;
+            ctx.quadraticCurveTo(
+              path.points[last - 1].x,
+              path.points[last - 1].y,
+              path.points[last].x,
+              path.points[last].y
+            );
+          }
+
+          ctx.stroke();
+        });
+      }
+
+      // Draw temporary preview line
+      function drawPreview() {
+        if (currentPath.length > 0 && tempPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = "#888";
+          ctx.lineWidth = 1;
+          ctx.setLineDash([5, 3]);
+
+          const lastPoint = currentPath[currentPath.length - 1];
+          ctx.moveTo(lastPoint.x, lastPoint.y);
+          ctx.lineTo(tempPoint.x, tempPoint.y);
+          ctx.stroke();
+          ctx.setLineDash([]);
+        }
+      }
+
+      // Draw snap indicator
+      function drawSnapIndicator() {
+        if (snapPoint) {
+          ctx.beginPath();
+          ctx.strokeStyle = "#f00";
+          ctx.lineWidth = 1;
+
+          // Draw different indicators based on snap type
+          if (snapPoint.type === "endpoint") {
+            ctx.strokeStyle = "#00f";
+            ctx.beginPath();
+            ctx.arc(snapPoint.x, snapPoint.y, 5, 0, Math.PI * 2);
+            ctx.stroke();
+          } else if (snapPoint.type === "midpoint") {
+            ctx.strokeStyle = "#0a0";
+            ctx.beginPath();
+            ctx.moveTo(snapPoint.x - 5, snapPoint.y - 5);
+            ctx.lineTo(snapPoint.x + 5, snapPoint.y + 5);
+            ctx.moveTo(snapPoint.x + 5, snapPoint.y - 5);
+            ctx.lineTo(snapPoint.x - 5, snapPoint.y + 5);
+            ctx.stroke();
+          } else if (snapPoint.type === "intersection") {
+            ctx.strokeStyle = "#f0f";
+            ctx.beginPath();
+            ctx.moveTo(snapPoint.x - 5, snapPoint.y);
+            ctx.lineTo(snapPoint.x + 5, snapPoint.y);
+            ctx.moveTo(snapPoint.x, snapPoint.y - 5);
+            ctx.lineTo(snapPoint.x, snapPoint.y + 5);
+            ctx.stroke();
+          } else if (snapPoint.type === "grid") {
+            ctx.strokeStyle = "#fa0";
+            ctx.beginPath();
+            ctx.arc(snapPoint.x, snapPoint.y, 3, 0, Math.PI * 2);
+            ctx.stroke();
+          }
+        }
+      }
+
+      // Render the canvas
+      function render() {
+        drawGrid();
+        drawPaths();
+        drawPreview();
+        drawSnapIndicator();
+
+        // Show coordinates in grid space
+        if (tempPoint) {
+          const gridPoint = canvasToGrid(tempPoint.x, tempPoint.y);
+          coordsDisplay.textContent = `${gridPoint.x.toFixed(
+            2
+          )}, ${gridPoint.y.toFixed(2)}`;
+        }
+      }
+
+      // Tool selection
+      tools.forEach((tool) => {
+        tool.addEventListener("click", () => {
+          tools.forEach((t) => t.classList.remove("active"));
+          tool.classList.add("active");
+          activeTool = tool.id;
+
+          // Handle visibility of fillet controls
+          if (activeTool === "fillet-tool") {
+            filletControls.style.display = "flex";
+            statusBar.textContent =
+              "Fillet tool selected. Select two connected lines.";
+          } else {
+            filletControls.style.display = "none";
+            if (activeTool === "clear-tool") {
+              // Clear canvas but keep saved drawings
+              currentPath = [];
+              tempPoint = null;
+              render();
+              statusBar.textContent = "Canvas cleared. Saved paths remain.";
+            } else if (activeTool === "clear-data-tool") {
+              // Clear everything
+              currentPath = [];
+              allPaths = [];
+              tempPoint = null;
+              render();
+              statusBar.textContent = "All drawing data cleared.";
+            } else if (activeTool === "save-tool") {
+              // Save the current drawing to PNG
+              const dataURL = canvas.toDataURL("image/png");
+              const link = document.createElement("a");
+              link.href = dataURL;
+              link.download = "drawing.png";
+              link.click();
+              statusBar.textContent = "Drawing saved as PNG.";
+            } else {
+              if (activeTool === "line-tool") {
+                statusBar.textContent =
+                  "Line tool selected. Click to start drawing.";
+              } else if (activeTool === "polyline-tool") {
+                statusBar.textContent =
+                  "Polyline tool selected. Click to add points, right-click to finish.";
+              } else if (activeTool === "arc-tool") {
+                statusBar.textContent =
+                  "Arc tool selected. Click to define 3 points of an arc.";
+              } else if (activeTool.includes("spline")) {
+                statusBar.textContent =
+                  "Spline tool selected. Click to add control points, right-click to finish.";
+              }
+              // Start new path
+              currentPath = [];
+            }
+          }
+          // Clear existing selections when tool changes
+          selectedPaths.forEach((selected) => {
+            canvas.classList.remove("selected-path");
+          });
+          selectedPaths = [];
+          render();
+        });
+      });
+
+      // Mouse event handlers
+      canvas.addEventListener("mousedown", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        let x = e.clientX - rect.left;
+        let y = e.clientY - rect.top;
+
+        // If we have a snap point, use it
+        if (snapPoint) {
+          x = snapPoint.x;
+          y = snapPoint.y;
+        }
+        if (activeTool === "fillet-tool") {
+          // Handle fillet tool selection
+          const nearest = findNearestLine(x, y);
+
+          if (nearest) {
+            const { path } = nearest;
+
+            const isAlreadySelected = selectedPaths.some(
+              (sp) => sp.path === path
+            );
+
+            // Usage in your selection handler:
+            if (isAlreadySelected) {
+              // Deselect if already selected
+              selectedPaths = selectedPaths.filter((sp) => sp.path !== path);
+            } else {
+              // Select line
+              selectedPaths.push(nearest);
+
+              if (selectedPaths.length === 2) {
+                // Attempt to apply fillet with two selected lines
+                const filletData = calculateFillet();
+                applyFillet(filletData);
+              }
+            }
+            allPaths.forEach((path, pathIndex) => {
+              path.points.forEach((point) => {});
+            });
+          }
+        } else if (
+          activeTool === "clear-tool" ||
+          activeTool === "clear-data-tool" ||
+          activeTool === "save-tool"
+        ) {
+          return;
+        } else {
+          // Handle right click to finish polylines, arcs, and splines
+          if (e.button === 2) {
+            if (
+              currentPath.length >= 2 &&
+              (activeTool === "polyline-tool" ||
+                activeTool === "spline3-tool" ||
+                activeTool === "spline5-tool")
+            ) {
+              allPaths.push({
+                type: activeTool.replace("-tool", ""),
+                points: [...currentPath],
+                color: "#333",
+              });
+
+              currentPath = [];
+              statusBar.textContent = `${activeTool.replace(
+                "-tool",
+                ""
+              )} completed.`;
+            }
+            return;
+          }
+
+          // For line tool
+          if (activeTool === "line-tool") {
+            if (currentPath.length === 0) {
+              // Start new line
+              currentPath.push({
+                x,
+                y,
+              });
+              drawing = true;
+              statusBar.textContent = "Click to complete the line.";
+            } else {
+              // Complete the line
+              currentPath.push({
+                x,
+                y,
+              });
+              allPaths.push({
+                type: "line",
+                points: [...currentPath],
+                color: "#333",
+              });
+              currentPath = [];
+              drawing = false;
+              statusBar.textContent =
+                "Line completed. Click to start a new line.";
+            }
+          }
+          // For polyline tool
+          else if (activeTool === "polyline-tool") {
+            currentPath.push({
+              x,
+              y,
+            });
+            drawing = true;
+            statusBar.textContent =
+              "Click to add more points, right-click to finish.";
+          }
+          // For arc tool (needs 3 points)
+          else if (activeTool === "arc-tool") {
+            currentPath.push({
+              x,
+              y,
+            });
+
+            if (currentPath.length === 3) {
+              allPaths.push({
+                type: "arc",
+                points: [...currentPath],
+                color: "#333",
+              });
+              currentPath = [];
+              drawing = false;
+              statusBar.textContent =
+                "Arc completed. Click to start a new arc.";
+            } else {
+              statusBar.textContent = `Point ${currentPath.length}/3 for arc. Click to add more points.`;
+            }
+          }
+          // For spline tools
+          else if (
+            activeTool === "spline3-tool" ||
+            activeTool === "spline5-tool"
+          ) {
+            currentPath.push({
+              x,
+              y,
+            });
+            drawing = true;
+
+            const maxPoints = activeTool === "spline3-tool" ? 3 : 5;
+
+            if (currentPath.length === maxPoints) {
+              allPaths.push({
+                type: activeTool.replace("-tool", ""),
+                points: [...currentPath],
+                color: "#333",
+              });
+              currentPath = [];
+              drawing = false;
+              statusBar.textContent = `${activeTool.replace(
+                "-tool",
+                ""
+              )} completed with ${maxPoints} points.`;
+            } else {
+              statusBar.textContent = `Point ${
+                currentPath.length
+              }/${maxPoints} for ${activeTool.replace(
+                "-tool",
+                ""
+              )}. Click to add more points.`;
+            }
+          }
+        }
+        render();
+      });
+
+      canvas.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+
+        // Check for snap points
+        snapPoint = findSnapPoint(x, y);
+
+        // Update temp point for preview
+        if (snapPoint) {
+          tempPoint = {
+            x: snapPoint.x,
+            y: snapPoint.y,
+          };
+        } else {
+          tempPoint = {
+            x,
+            y,
+          };
+        }
+
+        render();
+      });
+
+      // Prevent context menu on canvas
+      canvas.addEventListener("contextmenu", (e) => {
+        e.preventDefault();
+      });
+
+      // Initialize
+      document.getElementById("line-tool").classList.add("active");
+      drawGrid();
+      statusBar.textContent = "The map is ready for your work.";
+    </script>
+  <script>(function(){function c(){var b=a.contentDocument||a.contentWindow.document;if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'93efdb754cb5e2dd',t:'MTc0NzExNTIwNi4wMDAwMDA='};var a=document.createElement('script');a.nonce='';a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</html>

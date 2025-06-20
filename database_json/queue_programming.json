@@ -1,0 +1,15 @@
+[
+    {
+        "name": "test_charge",
+        "commands": [
+            {
+                "id": "c0fb0cc8-4db3-4e86-b5df-65bb04bf29d8",
+                "type": "battery",
+                "config": {
+                    "target_battery_level": 80
+                },
+                "subtype": "charging"
+            }
+        ]
+    }
+]

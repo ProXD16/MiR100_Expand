@@ -1,0 +1,13 @@
+{
+  "start_positions": [
+    1
+  ],
+  "waypoints": [
+    2,
+    4
+  ],
+  "goal_positions": [
+    3
+  ],
+  "last_updated": "2025-05-30T02:09:28.767493"
+}
