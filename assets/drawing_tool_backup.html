@@ -1,0 +1,1535 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>2D Drawing Tool</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            max-width: 1200px;
+            width: 100%;
+            padding: 20px;
+            text-align: center;
+        }
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+        }
+        .subtitle {
+            color: #7f8c8d;
+            margin-bottom: 20px;
+        }
+        .toolbar {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .tool-button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        .tool-button:hover {
+            background-color: #2980b9;
+        }
+        .tool-button.active {
+            background-color: #2980b9;
+            box-shadow: 0 0 5px rgba(0, 0, 0, 0.3) inset;
+        }
+        .canvas-container {
+            position: relative;
+            border: 2px solid #2c3e50;
+            overflow: hidden;
+            background-color: transparent;
+            min-width: 800px;
+            min-height: 600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #drawing-canvas {
+            cursor: crosshair;
+            display: block;
+            position: relative;
+            z-index: 10;
+            pointer-events: auto;
+        }
+        .status-bar {
+            margin-top: 10px;
+            color: #00bcd4;
+            font-size: 14px;
+            text-align: center;
+        }
+        .snap-controls {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            gap: 15px;
+            justify-content: center;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked+.slider {
+            background-color: #2196F3;
+        }
+        input:checked+.slider:before {
+            transform: translateX(26px);
+        }
+        .coordinates {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            background-color: rgba(255, 255, 255, 0.7);
+            padding: 2px 5px;
+            border-radius: 3px;
+            font-size: 12px;
+            pointer-events: none;
+            z-index: 15;
+        }
+        .snap-label {
+            font-weight: bold;
+        }
+        .snap-options {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .snap-option {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .snap-option label {
+            font-size: 14px;
+        }
+        .fillet-controls {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            gap: 15px;
+            justify-content: center;
+        }
+        .fillet-radius {
+            width: 60px;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .selected-path {
+            stroke: #ff9800 !important;
+            stroke-width: 3px !important;
+        }
+        .coord-input-container {
+            display: none;
+            margin-top: 10px;
+            gap: 10px;
+            justify-content: center;
+        }
+        .coord-input {
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            width: 80px;
+        }
+        .coord-submit {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .coord-submit:hover {
+            background-color: #2980b9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>DRAW</h1>
+        <p class="subtitle">Edit and draw the map.</p>
+        <div class="toolbar">
+            <button class="tool-button" id="line-tool">✏️LINE</button>
+            <button class="tool-button" id="polyline-tool">📏POLYLINE</button>
+            <button class="tool-button" id="arc-tool">🧲ARC</button>
+            <button class="tool-button" id="spline3-tool">📈SPLINE 3</button>
+            <button class="tool-button" id="spline5-tool">📉SPLINE 5</button>
+            <button class="tool-button" id="fillet-tool">🔄FILLET</button>
+            <button class="tool-button" id="save-tool">💾SAVE</button>
+            <button class="tool-button" id="clear-tool">🧹CLEAR</button>
+            <button class="tool-button" id="clear-data-tool">🗑️CLEAR DATA</button>
+        </div>
+        <div class="fillet-controls" id="fillet-controls" style="display: none;">
+            <span class="snap-label">Fillet Radius:</span>
+            <input type="number" id="fillet-radius" class="fillet-radius" value="1" min="0.1" step="0.1">
+            <span class="snap-label">(Select two connected lines)</span>
+        </div>
+        <div class="snap-controls">
+            <div class="snap-option">
+                <span class="snap-label">Auto-Snap:</span>
+                <label class="switch">
+                    <input type="checkbox" id="snap-toggle" checked>
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="snap-options">
+                <div class="snap-option">
+                    <input type="checkbox" id="snap-endpoint" checked>
+                    <label for="snap-endpoint">Endpoint</label>
+                </div>
+                <div class="snap-option">
+                    <input type="checkbox" id="snap-midpoint">
+                    <label for="snap-midpoint">Midpoint</label>
+                </div>
+                <div class="snap-option">
+                    <input type="checkbox" id="snap-intersection">
+                    <label for="snap-intersection">Intersection</label>
+                </div>
+                <div class="snap-option">
+                    <input type="checkbox" id="snap-grid">
+                    <label for="snap-grid">Grid</label>
+                </div>
+            </div>
+            <div class="snap-option">
+                <span class="snap-label">Enter Coordinates:</span>
+                <label class="switch">
+                    <input type="checkbox" id="coord-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+            <div class="snap-option">
+                <span class="snap-label">Ortho X/Y:</span>
+                <label class="switch">
+                    <input type="checkbox" id="ortho-toggle">
+                    <span class="slider"></span>
+                </label>
+            </div>
+        </div>
+        <div class="coord-input-container" id="coord-input-container"></div>
+        
+        <div class="canvas-container">
+            <canvas id="drawing-canvas"></canvas>
+            <div class="coordinates" id="coordinates">0, 0</div>
+        </div>
+        <div class="status-bar" id="status-bar">The map is ready for your work.</div>
+    </div>
+    <script>
+        // Canvas setup
+        const canvas = document.getElementById('drawing-canvas');
+        const ctx = canvas.getContext('2d');
+        const coordsDisplay = document.getElementById('coordinates');
+        const statusBar = document.getElementById('status-bar');
+        const filletControls = document.getElementById('fillet-controls');
+        const canvasContainer = document.querySelector('.canvas-container');
+        const coordInputContainer = document.getElementById('coord-input-container');
+
+        // Load map image
+        const mapImage = new Image();
+        mapImage.src = '/static/map_image.png';
+        mapImage.onload = () => {
+            console.log('Map image loaded');
+            render();
+        };
+        mapImage.onerror = () => {
+            console.error('Failed to load map image');
+            statusBar.textContent = 'Failed to load map image.';
+        };
+
+        // Map parameters with default values
+        let mapWidth = 400;
+        let mapHeight = 400;
+        let resolution = 0.05;
+        let resolution_x = 0.05;
+        let resolution_y = 0.05;
+        let origin_x = 0.0;
+        let origin_y = 0.0;
+        let scaleFactor = 20;
+        let offsetX = 50;
+        let offsetY = 50;
+
+        // Load map JSON and initialize
+        fetch('/static/map_image.json')
+            .then(response => {
+                if (!response.ok) throw new Error('Failed to load map_image.json');
+                return response.json();
+            })
+            .then(data => {
+                console.log('JSON data:', data);
+                mapWidth = data.width || 400;
+                mapHeight = data.height || 400;
+                resolution = data.resolution || 0.05;
+                resolution_x = data.resolution_x || 0.05;
+                resolution_y = data.resolution_y || 0.05;
+                origin_x = data.origin_x || 0.0;
+                origin_y = data.origin_y || 0.0;
+                initCanvas();
+                init();
+            })
+            .catch(error => {
+                console.error('Error loading map image JSON:', error);
+                statusBar.textContent = 'Failed to load map parameters, using defaults.';
+                initCanvas();
+                init();
+            });
+
+        // Initialize canvas size
+        function initCanvas() {
+            const mapWidthMeters = mapWidth * resolution_x;
+            const mapHeightMeters = mapHeight * resolution_y;
+            const containerWidth = Math.max(canvasContainer.clientWidth, 800);
+            const containerHeight = Math.max(canvasContainer.clientHeight, 600);
+            const scaleFactorX = (containerWidth - 2 * offsetX) / mapWidthMeters;
+            const scaleFactorY = (containerHeight - 2 * offsetY) / mapHeightMeters;
+            scaleFactor = Math.min(scaleFactorX, scaleFactorY);
+            canvas.width = mapWidthMeters * scaleFactor + 2 * offsetX;
+            canvas.height = mapHeightMeters * scaleFactor + 2 * offsetY;
+            console.log('Canvas size:', canvas.width, canvas.height, 'Scale factor:', scaleFactor);
+        }
+
+        function init() {
+            const tools = document.querySelectorAll('.tool-button');
+            let activeTool = 'line-tool';
+            let drawing = false;
+            let currentPath = [];
+            let allPaths = [];
+            let tempPoint = null;
+            let snapPoint = null;
+            let selectedPaths = [];
+            let filletRadius = 1;
+            let orthoMode = false;
+            const gridSize = 1 * scaleFactor;
+            const canvasWidth = canvas.width;
+            const canvasHeight = canvas.height;
+            let isCoordMode = false;
+
+            const orthoToggle = document.getElementById('ortho-toggle');
+            orthoToggle.addEventListener('change', () => {
+                orthoMode = orthoToggle.checked;
+                if (orthoMode && isCoordMode) { // If Ortho is turned ON and Coordinate Input was ON
+                    coordToggle.checked = false; // Turn OFF Coordinate Input switch
+                    isCoordMode = false;         // Update the state variable
+                    canvas.style.pointerEvents = 'auto';
+                    hideCoordInput();
+                    statusBar.textContent = "Ortho mode enabled. Coordinate input disabled.";
+                } else if (orthoMode) {
+                    statusBar.textContent = "Ortho mode enabled.";
+                } else {
+                    statusBar.textContent = "Ortho mode disabled.";
+                }
+                render();
+            });
+
+            const filletRadiusInput = document.getElementById('fillet-radius');
+            filletRadiusInput.addEventListener('change', () => {
+                filletRadius = parseFloat(filletRadiusInput.value);
+                if (isNaN(filletRadius) || filletRadius <= 0) {
+                    filletRadius = 0.1;
+                    filletRadiusInput.value = 0.1;
+                }
+            });
+
+            const coordToggle = document.getElementById('coord-toggle');
+            coordToggle.addEventListener('change', () => {
+                isCoordMode = coordToggle.checked;
+                if (isCoordMode) {  // If "Enter Coordinates" is turned ON
+                    canvas.style.pointerEvents = 'none';
+                    showCoordInput();
+                    if (orthoMode) { // Check if Ortho mode is currently ON
+                        orthoMode = false; // Turn Ortho mode logic OFF
+                        orthoToggle.checked = false; // Uncheck the Ortho toggle switch
+                        statusBar.textContent = "Coordinate input enabled. Ortho mode disabled.";
+                    } else {
+                        // statusBar.textContent = "Coordinate input enabled."; // Or keep current from showCoordInput
+                    }
+                } else { // If "Enter Coordinates" is turned OFF
+                    canvas.style.pointerEvents = 'auto';
+                    hideCoordInput();
+                }
+                render();
+            });
+
+            function canvasToGrid(x, y) {
+                return {
+                    x: (x - offsetX) / scaleFactor + origin_x,
+                    y: (canvasHeight - y - offsetY) / scaleFactor + origin_y
+                };
+            }
+
+            function gridToCanvas(x, y) {
+                return {
+                    x: (x - origin_x) * scaleFactor + offsetX,
+                    y: canvasHeight - ((y - origin_y) * scaleFactor + offsetY)
+                };
+            }
+
+            function drawMapImage() {
+                if (mapImage.complete && mapImage.naturalWidth !== 0) {
+                    const mapCanvasWidth = mapWidth * resolution_x * scaleFactor;
+                    const mapCanvasHeight = mapHeight * resolution_y * scaleFactor;
+                    const centerX = (canvasWidth - mapCanvasWidth) / 2;
+                    const centerY = (canvasHeight - mapCanvasHeight) / 2;
+                    ctx.drawImage(
+                        mapImage,
+                        centerX,
+                        centerY,
+                        mapCanvasWidth,
+                        mapCanvasHeight
+                    );
+                } else {
+                    console.warn('Map image not loaded, skipping drawImage');
+                }
+            }
+
+            function drawGrid() {
+                drawMapImage();
+                ctx.strokeStyle = 'rgba(224, 224, 224, 0.3)';
+                ctx.lineWidth = 0.5;
+                const gridSpacingMeters = 1;
+                for (let x = origin_x; x <= origin_x + mapWidth * resolution_x; x += gridSpacingMeters) {
+                    const canvasX = gridToCanvas(x, 0).x;
+                    ctx.beginPath();
+                    ctx.moveTo(canvasX, 0);
+                    ctx.lineTo(canvasX, canvasHeight);
+                    ctx.stroke();
+                }
+                for (let y = origin_y; y <= origin_y + mapHeight * resolution_y; y += gridSpacingMeters) {
+                    const canvasY = gridToCanvas(0, y).y;
+                    ctx.beginPath();
+                    ctx.moveTo(0, canvasY);
+                    ctx.lineTo(canvasWidth, canvasY);
+                    ctx.stroke();
+                }
+                ctx.strokeStyle = 'rgba(160, 160, 160, 0.5)';
+                ctx.lineWidth = 1;
+                const yAxis = gridToCanvas(0, origin_y).y;
+                ctx.beginPath();
+                ctx.moveTo(offsetX, yAxis);
+                ctx.lineTo(canvasWidth, yAxis);
+                ctx.stroke();
+                const xAxis = gridToCanvas(origin_x, 0).x;
+                ctx.beginPath();
+                ctx.moveTo(xAxis, 0);
+                ctx.lineTo(xAxis, canvasHeight);
+                ctx.stroke();
+                ctx.fillStyle = 'rgba(102, 102, 102, 0.7)';
+                ctx.font = '12px Arial';
+                for (let x = 0; x <= mapWidth * resolution_x; x += 5) {
+                    const canvasX = gridToCanvas(x, 0).x;
+                    ctx.fillText(x, canvasX - 3, yAxis + 15);
+                }
+                for (let y = 0; y <= mapHeight * resolution_y; y += 5) {
+                    const canvasY = gridToCanvas(0, y).y;
+                    ctx.fillText(y, xAxis - 25, canvasY + 4);
+                }
+            }
+
+            function findSnapPoint(x, y) {
+                if (!document.getElementById('snap-toggle').checked || isCoordMode) return null;
+                const snapRadius = 10;
+                const mousePoint = { x, y };
+                let closestPoint = null;
+                let minDistance = snapRadius;
+                if (document.getElementById('snap-grid').checked) {
+                    const gridPoint = canvasToGrid(x, y);
+                    const gridX = Math.round(gridPoint.x) * scaleFactor + offsetX;
+                    const gridY = canvasHeight - (Math.round(gridPoint.y) * scaleFactor + offsetY);
+                    const gridDist = Math.sqrt(Math.pow(gridX - x, 2) + Math.pow(gridY - y, 2));
+                    if (gridDist < minDistance) {
+                        minDistance = gridDist;
+                        closestPoint = { x: gridX, y: gridY, type: 'grid' };
+                    }
+                }
+                if (document.getElementById('snap-endpoint').checked) {
+                    allPaths.forEach(path => {
+                        if (path.points.length > 0) {
+                            const firstPoint = path.points[0];
+                            const distFirst = Math.sqrt(
+                                Math.pow(firstPoint.x - mousePoint.x, 2) +
+                                Math.pow(firstPoint.y - mousePoint.y, 2)
+                            );
+                            if (distFirst < minDistance) {
+                                minDistance = distFirst;
+                                closestPoint = { x: firstPoint.x, y: firstPoint.y, type: 'endpoint' };
+                            }
+                            const lastPoint = path.points[path.points.length - 1];
+                            const distLast = Math.sqrt(
+                                Math.pow(lastPoint.x - mousePoint.x, 2) +
+                                Math.pow(lastPoint.y - mousePoint.y, 2)
+                            );
+                            if (distLast < minDistance) {
+                                minDistance = distLast;
+                                closestPoint = { x: lastPoint.x, y: lastPoint.y, type: 'endpoint' };
+                            }
+                        }
+                    });
+                }
+                if (document.getElementById('snap-midpoint').checked) {
+                    allPaths.forEach(path => {
+                        if (path.type === 'line' && path.points.length >= 2) {
+                            for (let i = 0; i < path.points.length - 1; i++) {
+                                const p1 = path.points[i];
+                                const p2 = path.points[i + 1];
+                                const midX = (p1.x + p2.x) / 2;
+                                const midY = (p1.y + p2.y) / 2;
+                                const distMid = Math.sqrt(
+                                    Math.pow(midX - mousePoint.x, 2) +
+                                    Math.pow(midY - mousePoint.y, 2)
+                                );
+                                if (distMid < minDistance) {
+                                    minDistance = distMid;
+                                    closestPoint = { x: midX, y: midY, type: 'midpoint' };
+                                }
+                            }
+                        }
+                    });
+                }
+                if (document.getElementById('snap-intersection').checked) {
+                    for (let i = 0; i < allPaths.length; i++) {
+                        for (let j = i + 1; j < allPaths.length; j++) {
+                            if (allPaths[i].type === 'line' && allPaths[j].type === 'line') {
+                                for (let pi = 0; pi < allPaths[i].points.length - 1; pi++) {
+                                    for (let pj = 0; pj < allPaths[j].points.length - 1; pj++) {
+                                        const line1 = {
+                                            x1: allPaths[i].points[pi].x,
+                                            y1: allPaths[i].points[pi].y,
+                                            x2: allPaths[i].points[pi + 1].x,
+                                            y2: allPaths[i].points[pi + 1].y
+                                        };
+                                        const line2 = {
+                                            x1: allPaths[j].points[pj].x,
+                                            y1: allPaths[j].points[pj].y,
+                                            x2: allPaths[j].points[pj + 1].x,
+                                            y2: allPaths[j].points[pj + 1].y
+                                        };
+                                        const intersection = findLineIntersection(line1, line2);
+                                        if (intersection) {
+                                            const distIntersection = Math.sqrt(
+                                                Math.pow(intersection.x - mousePoint.x, 2) +
+                                                Math.pow(intersection.y - mousePoint.y, 2)
+                                            );
+                                            if (distIntersection < minDistance) {
+                                                minDistance = distIntersection;
+                                                closestPoint = { x: intersection.x, y: intersection.y, type: 'intersection' };
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                return closestPoint;
+            }
+
+            function findLineIntersection(line1, line2) {
+                const x1 = line1.x1, y1 = line1.y1, x2 = line1.x2, y2 = line1.y2;
+                const x3 = line2.x1, y3 = line2.y1, x4 = line2.x2, y4 = line2.y2;
+                const denominator = ((y4 - y3) * (x2 - x1)) - ((x4 - x3) * (y2 - y1));
+                if (denominator === 0) return null;
+                const ua = (((x4 - x3) * (y1 - y3)) - ((y4 - y3) * (x1 - x3))) / denominator;
+                const ub = (((x2 - x1) * (y1 - y3)) - ((y2 - y1) * (x1 - x3))) / denominator;
+                if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+                    const x = x1 + (ua * (x2 - x1));
+                    const y = y1 + (ua * (y2 - y1));
+                    return { x, y };
+                }
+                return null;
+            }
+
+            function distance(p1, p2) {
+                return Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2));
+            }
+
+            function distanceToLineSegment(point, line) {
+                const { x, y } = point;
+                const { x1, y1, x2, y2 } = line;
+                const A = x - x1;
+                const B = y - y1;
+                const C = x2 - x1;
+                const D = y2 - y1;
+                const dot = A * C + B * D;
+                const len_sq = C * C + D * D;
+                let param = -1;
+                if (len_sq !== 0) param = dot / len_sq;
+                let xx, yy;
+                if (param < 0) {
+                    xx = x1;
+                    yy = y1;
+                } else if (param > 1) {
+                    xx = x2;
+                    yy = y2;
+                } else {
+                    xx = x1 + param * C;
+                    yy = y1 + param * D;
+                }
+                const dx = x - xx;
+                const dy = y - yy;
+                return Math.sqrt(dx * dx + dy * dy);
+            }
+
+            function findNearestLine(x, y) {
+                const mousePoint = { x, y };
+                let closestDist = Infinity;
+                let closestPath = null;
+                let closestSegmentIndex = -1;
+                allPaths.forEach((path, pathIndex) => {
+                    if (path.type === 'line' && path.points.length >= 2) {
+                        for (let i = 0; i < path.points.length - 1; i++) {
+                            const p1 = path.points[i];
+                            const p2 = path.points[i + 1];
+                            const line = { x1: p1.x, y1: p1.y, x2: p2.x, y2: p2.y };
+                            const dist = distanceToLineSegment(mousePoint, line);
+                            if (dist < closestDist && dist < 10) {
+                                closestDist = dist;
+                                closestPath = path;
+                                closestPath.index = pathIndex; // Assign original index to path object itself
+                                closestSegmentIndex = i;
+                            }
+                        }
+                    }
+                });
+                // Return the path object which now has an 'index' property
+                return closestPath ? { path: closestPath, segmentIndex: closestSegmentIndex } : null;
+            }
+
+            function findCommonPoint(line1, line2) {
+                for (let i = 0; i < line1.points.length; i++) {
+                    for (let j = 0; j < line2.points.length; j++) {
+                        const p1 = line1.points[i];
+                        const p2 = line2.points[j];
+                        if (Math.abs(p1.x - p2.x) < 0.001 && Math.abs(p1.y - p2.y) < 0.001) {
+                            return { point: p1, index1: i, index2: j };
+                        }
+                    }
+                }
+                return null;
+            }
+
+            function calculateFillet() {
+                if (selectedPaths.length !== 2) return null;
+                const selectedLine1Info = selectedPaths[0];
+                const selectedLine2Info = selectedPaths[1];
+                const line1 = selectedLine1Info.path; // Path object itself
+                const line2 = selectedLine2Info.path; // Path object itself
+
+                const commonPointInfo = findCommonPoint(line1, line2);
+                if (!commonPointInfo) {
+                    statusBar.textContent = "Selected lines don't share a corner point!";
+                    return null;
+                }
+                const { point: corner, index1, index2 } = commonPointInfo;
+
+                const p1 = index1 === 0 ? (line1.points.length > 1 ? line1.points[1] : null) : line1.points[index1 - 1];
+                const p2 = index2 === 0 ? (line2.points.length > 1 ? line2.points[1] : null) : line2.points[index2 - 1];
+
+                if (!p1 || !p2) {
+                     statusBar.textContent = "Cannot determine fillet segments (line too short).";
+                     return null;
+                }
+
+
+                const v1 = { x: p1.x - corner.x, y: p1.y - corner.y };
+                const v2 = { x: p2.x - corner.x, y: p2.y - corner.y };
+                const len1 = Math.hypot(v1.x, v1.y);
+                const len2 = Math.hypot(v2.x, v2.y);
+
+                if (len1 < 1e-6 || len2 < 1e-6) {
+                     statusBar.textContent = "Fillet segments are too short.";
+                     return null;
+                }
+
+
+                const n1 = { x: v1.x / len1, y: v1.y / len1 };
+                const n2 = { x: v2.x / len2, y: v2.y / len2 };
+
+                // Angle between vectors n1 and n2
+                let cosTheta = n1.x * n2.x + n1.y * n2.y;
+                // Clamp cosTheta to avoid Math.acos errors due to floating point inaccuracies
+                cosTheta = Math.max(-1, Math.min(1, cosTheta));
+                const theta = Math.acos(cosTheta);
+
+                if (Math.abs(theta) < 1e-6 || Math.abs(theta - Math.PI) < 1e-6) { // Collinear
+                    statusBar.textContent = "Lines are collinear, cannot fillet.";
+                    return null;
+                }
+
+
+                const radiusValue = parseFloat(document.getElementById('fillet-radius').value);
+                if (isNaN(radiusValue) || radiusValue <=0) {
+                     statusBar.textContent = "Invalid fillet radius.";
+                     return null;
+                }
+                const radiusCanvas = radiusValue * scaleFactor;
+
+
+                const tanHalfTheta = Math.tan(theta / 2);
+                if (Math.abs(tanHalfTheta) < 1e-9) {
+                    statusBar.textContent = "Angle too small for fillet calculation.";
+                    return null;
+                }
+                const tangentDist = radiusCanvas / tanHalfTheta;
+
+
+                if (tangentDist > len1 || tangentDist > len2) {
+                    statusBar.textContent = "Fillet radius too large for segment lengths.";
+                    return null;
+                }
+
+
+                const p1Trim = {
+                    x: corner.x + n1.x * tangentDist,
+                    y: corner.y + n1.y * tangentDist,
+                };
+                const p2Trim = {
+                    x: corner.x + n2.x * tangentDist,
+                    y: corner.y + n2.y * tangentDist,
+                };
+                
+                const controlPoint = corner; 
+
+                return {
+                    line1Data: { 
+                        ...line1, 
+                        newEndPoint: p1Trim,
+                        cornerIndex: index1,
+                    },
+                    line2Data: { 
+                        ...line2, 
+                        newEndPoint: p2Trim,
+                        cornerIndex: index2,
+                    },
+                    bezier: {
+                        type: 'path', 
+                        points: [p1Trim, controlPoint, p2Trim], 
+                        color: '#e74c3c', 
+                    },
+                };
+            }
+
+            function applyFillet(filletData) {
+                if (!filletData) return;
+                const { line1Data, line2Data, bezier } = filletData;
+
+                const newPoints1 = [];
+                if (line1Data.cornerIndex === 0) { 
+                    newPoints1.push(bezier.points[0]); 
+                    for (let i = 1; i < line1Data.points.length; i++) {
+                        newPoints1.push(line1Data.points[i]);
+                    }
+                } else { 
+                    for (let i = 0; i < line1Data.cornerIndex; i++) {
+                        newPoints1.push(line1Data.points[i]);
+                    }
+                    newPoints1.push(bezier.points[0]); 
+                }
+
+                const newPoints2 = [];
+                if (line2Data.cornerIndex === 0) { 
+                    newPoints2.push(bezier.points[2]); 
+                    for (let i = 1; i < line2Data.points.length; i++) {
+                        newPoints2.push(line2Data.points[i]);
+                    }
+                } else { 
+                    for (let i = 0; i < line2Data.cornerIndex; i++) {
+                        newPoints2.push(line2Data.points[i]);
+                    }
+                    newPoints2.push(bezier.points[2]); 
+                }
+
+                const indicesToRemove = new Set([line1Data.index, line2Data.index]);
+                allPaths = allPaths.filter((path, index) => !indicesToRemove.has(index));
+
+                if (newPoints1.length >= 2) {
+                    allPaths.push({ type: 'line', points: newPoints1, color: line1Data.color || '#333' });
+                }
+                if (newPoints2.length >= 2) {
+                    allPaths.push({ type: 'line', points: newPoints2, color: line2Data.color || '#333' });
+                }
+                allPaths.push(bezier); 
+
+                selectedPaths = [];
+                statusBar.textContent = 'Fillet created successfully!';
+                render();
+            }
+
+
+            function drawPaths() {
+                allPaths.forEach((path, pathIndex) => {
+                    if (!path.points || path.points.length < 1) {
+                        return;
+                    }
+                  
+                    const isSelected = selectedPaths.some(sp => sp.path.index === pathIndex); 
+                    ctx.beginPath();
+                    ctx.strokeStyle = isSelected ? '#ff9800' : (path.color || '#333');
+                    ctx.lineWidth = isSelected ? 3 : 2;
+
+                    ctx.moveTo(path.points[0].x, path.points[0].y);
+
+                    if (path.type === 'line' || path.type === 'polyline') {
+                         // Ensure there's a second point to draw a line to
+                        if (path.points.length >= 2) {
+                            for(let i = 1; i < path.points.length; i++) {
+                                ctx.lineTo(path.points[i].x, path.points[i].y);
+                            }
+                        }
+                    } else if (path.type === 'path' && path.points.length === 3) { 
+                        ctx.quadraticCurveTo(
+                            path.points[1].x,
+                            path.points[1].y,
+                            path.points[2].x,
+                            path.points[2].y
+                        );
+                    } else if (path.type === 'arc' && path.points.length >= 3) {
+                        const p1 = path.points[0];
+                        const p2 = path.points[1];
+                        const p3 = path.points[2];
+                        const ax = p1.x, ay = p1.y;
+                        const bx = p2.x, by = p2.y;
+                        const cx = p3.x, cy = p3.y;
+
+                        const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+                        if (Math.abs(D) < 1e-6) { 
+                            ctx.lineTo(cx, cy); 
+                        } else {
+                            const K = (ax*ax + ay*ay);
+                            const L = (bx*bx + by*by);
+                            const M = (cx*cx + cy*cy);
+
+                            const centerX = (K * (by - cy) + L * (cy - ay) + M * (ay - by)) / D;
+                            const centerY = (K * (cx - bx) + L * (ax - cx) + M * (bx - ax)) / D;
+                            const radius = Math.hypot(ax - centerX, ay - centerY);
+                            const startAngle = Math.atan2(ay - centerY, ax - centerX);
+                            const endAngle = Math.atan2(cy - centerY, cx - centerX);
+                            const cross_product_orientation = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+                            ctx.arc(centerX, centerY, radius, startAngle, endAngle, cross_product_orientation < 0);
+                        }
+                    } else if ((path.type === 'spline3' || path.type === 'spline5') && path.points.length >= 2) { // Original spline drawing
+                        ctx.moveTo(path.points[0].x, path.points[0].y);
+                        for (let i = 0; i < path.points.length - 2; i++) {
+                            const controlPoint = path.points[i + 1];
+                            const endPointX = (path.points[i + 1].x + path.points[i + 2].x) / 2;
+                            const endPointY = (path.points[i + 1].y + path.points[i + 2].y) / 2;
+                            ctx.quadraticCurveTo(
+                                controlPoint.x,
+                                controlPoint.y,
+                                endPointX,
+                                endPointY
+                            );
+                        }
+                        // For the last segment, draw a quadratic curve to the actual last point
+                        // using the second to last point as the control point.
+                        // This ensures the spline reaches the final clicked point.
+                        if (path.points.length > 1) { // Check if there's at least one segment
+                             const last = path.points.length - 1;
+                             // If only 2 points, it's a line. If 3 points, use points[1] as control for points[0] to points[2].
+                             // The loop above handles cases with 3+ points for the segments before the last one.
+                             // This handles the final segment from the last calculated midpoint to the actual last point.
+                             // Or, if few points, ensures it draws to the last point using previous as control.
+                             if (path.points.length > 2 ) { // Need at least 3 points for this specific ending logic
+                                ctx.quadraticCurveTo(
+                                    path.points[last-1].x, path.points[last-1].y, // control point
+                                    path.points[last].x, path.points[last].y     // end point
+                                );
+                             } else if (path.points.length === 2) { // if only 2 points, draw a line
+                                 ctx.lineTo(path.points[1].x, path.points[1].y);
+                             }
+                        }
+                    }
+                    ctx.stroke();
+                });
+            }
+
+            function drawPreview() {
+                if (!isCoordMode && currentPath.length > 0 && tempPoint) {
+                    ctx.beginPath();
+                    ctx.strokeStyle = '#888';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([5, 3]);
+                    const lastPoint = currentPath[currentPath.length - 1];
+                    let previewX = tempPoint.x;
+                    let previewY = tempPoint.y;
+
+                    if (orthoMode && (activeTool === 'line-tool' || activeTool === 'polyline-tool')) {
+                         const dx = Math.abs(tempPoint.x - lastPoint.x);
+                         const dy = Math.abs(tempPoint.y - lastPoint.y);
+                         if (dx < dy) previewX = lastPoint.x;
+                         else previewY = lastPoint.y;
+                    }
+
+
+                    ctx.moveTo(lastPoint.x, lastPoint.y);
+                    if (activeTool === 'arc-tool' && currentPath.length === 2) {
+                        const p1 = currentPath[0];
+                        const p2 = currentPath[1];
+                        const p3 = {x: previewX, y: previewY};
+                        const ax = p1.x, ay = p1.y;
+                        const bx = p2.x, by = p2.y;
+                        const cx = p3.x, cy = p3.y;
+                        const D = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+                        if (Math.abs(D) > 1e-6) {
+                            const K = (ax*ax + ay*ay);
+                            const L = (bx*bx + by*by);
+                            const M = (cx*cx + cy*cy);
+                            const centerX = (K * (by - cy) + L * (cy - ay) + M * (ay - by)) / D;
+                            const centerY = (K * (cx - bx) + L * (ax - cx) + M * (bx - ax)) / D;
+                            const radius = Math.hypot(ax - centerX, ay - centerY);
+                            const startAngle = Math.atan2(ay - centerY, ax - centerX);
+                            const endAngle = Math.atan2(cy - centerY, cx - centerX);
+                            const cross_product_orientation = (p2.x - p1.x) * (p3.y - p1.y) - (p2.y - p1.y) * (p3.x - p1.x);
+                            ctx.arc(centerX, centerY, radius, startAngle, endAngle,  cross_product_orientation < 0);
+                        } else {
+                            ctx.lineTo(previewX, previewY);
+                        }
+
+                    } else { // For line, polyline, and initial points of arc/spline
+                        ctx.lineTo(previewX, previewY);
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+
+            function drawSnapIndicator() {
+                if (!isCoordMode && snapPoint) {
+                    ctx.beginPath();
+                    ctx.lineWidth = 1.5; 
+                    const size = 6; 
+
+                    if (snapPoint.type === 'endpoint') {
+                        ctx.strokeStyle = '#007bff'; 
+                        ctx.strokeRect(snapPoint.x - size/2, snapPoint.y - size/2, size, size); 
+                    } else if (snapPoint.type === 'midpoint') {
+                        ctx.strokeStyle = '#28a745'; 
+                        ctx.moveTo(snapPoint.x, snapPoint.y - size/1.5);
+                        ctx.lineTo(snapPoint.x + size/1.5, snapPoint.y + size/3);
+                        ctx.lineTo(snapPoint.x - size/1.5, snapPoint.y + size/3);
+                        ctx.closePath();
+                    } else if (snapPoint.type === 'intersection') {
+                        ctx.strokeStyle = '#dc3545'; 
+                        ctx.moveTo(snapPoint.x - size/2, snapPoint.y - size/2);
+                        ctx.lineTo(snapPoint.x + size/2, snapPoint.y + size/2);
+                        ctx.moveTo(snapPoint.x + size/2, snapPoint.y - size/2);
+                        ctx.lineTo(snapPoint.x - size/2, snapPoint.y + size/2);
+                    } else if (snapPoint.type === 'grid') {
+                        ctx.strokeStyle = '#ffc107'; 
+                        ctx.beginPath(); 
+                        ctx.arc(snapPoint.x, snapPoint.y, size/2, 0, Math.PI * 2); 
+                    }
+                    ctx.stroke();
+                }
+            }
+
+            function render() {
+                ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+                drawGrid();
+                drawPaths();
+                drawPreview();
+                drawSnapIndicator();
+                if (!isCoordMode && tempPoint) {
+                    const gridPoint = canvasToGrid(tempPoint.x, tempPoint.y);
+                    coordsDisplay.textContent = `${gridPoint.x.toFixed(2)}, ${gridPoint.y.toFixed(2)}`;
+                } else if (!isCoordMode && !tempPoint) { 
+                     coordsDisplay.textContent = `0.00, 0.00`;
+                }
+            }
+
+            function showCoordInput() {
+                coordInputContainer.innerHTML = ''; 
+                let pointsNeeded = 0;
+                let instructionText = "";
+                switch (activeTool) {
+                    case 'line-tool':
+                        pointsNeeded = currentPath.length === 0 ? 2 : 1;
+                        instructionText = currentPath.length === 0 ? 'Line: Enter start & end points.' : 'Line: Enter end point.';
+                        break;
+                    case 'polyline-tool':
+                        pointsNeeded = 1; 
+                        instructionText = currentPath.length === 0 ? 'Polyline: Enter first point.' : 'Polyline: Enter next point.';
+                        break;
+                    case 'arc-tool':
+                        pointsNeeded = 3 - currentPath.length;
+                        instructionText = `Arc: Enter point ${currentPath.length + 1} of 3.`;
+                        break;
+                    case 'spline3-tool':
+                         pointsNeeded = 4 - currentPath.length;
+                        instructionText = `Spline3: Enter point ${currentPath.length + 1} of 4.`;
+                        break;
+                    case 'spline5-tool':
+                         pointsNeeded = 6 - currentPath.length;
+                        instructionText = `Spline5: Enter point ${currentPath.length + 1} of 6.`;
+                        break;
+                    default:
+                        coordInputContainer.style.display = 'none';
+                        return;
+                }
+
+                statusBar.textContent = instructionText;
+                
+                if (pointsNeeded <=0 && activeTool !== 'polyline-tool') { 
+                     coordInputContainer.style.display = 'none';
+                     return;
+                }
+
+                coordInputContainer.style.display = 'flex';
+                coordInputContainer.style.flexDirection = 'row'; 
+                coordInputContainer.style.flexWrap = 'wrap';     
+                coordInputContainer.style.justifyContent = 'center'; 
+                coordInputContainer.style.alignItems = 'center';   
+                coordInputContainer.style.gap = '15px'; 
+
+
+                for (let i = 0; i < pointsNeeded; i++) {
+                    const div = document.createElement('div');
+                    div.style.display = 'flex';
+                    div.style.alignItems = 'center';
+                    div.style.gap = '5px'; 
+
+                    const pointLabel = currentPath.length + i + 1;
+                    
+                    const labelSpan = document.createElement('span');
+                    labelSpan.textContent = `P${pointLabel}:`;
+
+                    const inputX = document.createElement('input');
+                    inputX.type = 'number';
+                    inputX.className = 'coord-input';
+                    inputX.id = `coordX${i}`;
+                    inputX.placeholder = 'X (m)';
+                    inputX.step = 'any'; 
+
+                    const inputY = document.createElement('input');
+                    inputY.type = 'number';
+                    inputY.className = 'coord-input';
+                    inputY.id = `coordY${i}`;
+                    inputY.placeholder = 'Y (m)';
+                    inputY.step = 'any'; 
+
+                    div.appendChild(labelSpan);
+                    div.appendChild(inputX);
+                    div.appendChild(inputY);
+
+                    coordInputContainer.appendChild(div);
+                }
+                
+                if (pointsNeeded > 0 || (activeTool === 'polyline-tool' && currentPath.length > 0)) {
+                    
+                    if (pointsNeeded > 0 && document.getElementById('coordX0')) { 
+                        document.getElementById('coordX0').focus(); 
+
+                        const submitBtn = document.createElement('button');
+                        submitBtn.className = 'coord-submit';
+                        submitBtn.textContent = 'Add Point(s)';
+
+                        const handleInputSubmit = () => {
+                            const enteredCanvasPoints = [];
+                            for (let i = 0; i < pointsNeeded; i++) { 
+                                const xInput = document.getElementById(`coordX${i}`);
+                                const yInput = document.getElementById(`coordY${i}`);
+                                if (!xInput || !yInput) { 
+                                    console.error("Input field not found during submit");
+                                    continue;
+                                }
+                                const xVal = parseFloat(xInput.value);
+                                const yVal = parseFloat(yInput.value);
+                                if (isNaN(xVal) || isNaN(yVal)) {
+                                    statusBar.textContent = 'Invalid coordinate input. Please enter numbers.';
+                                    return; 
+                                }
+                                enteredCanvasPoints.push(gridToCanvas(xVal, yVal));
+                            }
+
+                            enteredCanvasPoints.forEach(p => currentPath.push(p));
+
+                            let toolFinished = false;
+                            if (activeTool === 'line-tool' && currentPath.length >= 2) toolFinished = true;
+                            else if (activeTool === 'arc-tool' && currentPath.length >= 3) toolFinished = true;
+                            else if (activeTool === 'spline3-tool' && currentPath.length >= 4) toolFinished = true;
+                            else if (activeTool === 'spline5-tool' && currentPath.length >= 6) toolFinished = true;
+
+                            if (toolFinished) {
+                                allPaths.push({ type: activeTool.replace('-tool', ''), points: [...currentPath], color: '#333' });
+                                statusBar.textContent = `${activeTool.replace('-tool', '')} created.`;
+                                currentPath = []; 
+                            } else if (activeTool === 'polyline-tool') {
+                                statusBar.textContent = `Polyline: Point ${currentPath.length} added. Add more or Finish.`;
+                            }
+                            render();
+                            showCoordInput(); 
+                        };
+
+                        submitBtn.addEventListener('click', handleInputSubmit);
+                        coordInputContainer.appendChild(submitBtn);
+
+                        const lastYInputId = `coordY${pointsNeeded - 1}`;
+                        const lastYInputElement = document.getElementById(lastYInputId);
+                        if (lastYInputElement) {
+                            lastYInputElement.addEventListener('keydown', (event) => {
+                                if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    handleInputSubmit();
+                                }
+                            });
+                        }
+                    }
+
+                    if (activeTool === 'polyline-tool' && currentPath.length > 0) {
+                        const finishPolyBtn = document.createElement('button');
+                        finishPolyBtn.className = 'coord-submit';
+                        finishPolyBtn.textContent = 'Finish Polyline';
+                        finishPolyBtn.addEventListener('click', () => {
+                            if (currentPath.length >= 2) {
+                                allPaths.push({ type: 'polyline', points: [...currentPath], color: '#333' });
+                                statusBar.textContent = 'Polyline finished.';
+                                currentPath = [];
+                                render();
+                                showCoordInput(); 
+                            } else {
+                                statusBar.textContent = 'Polyline needs at least 2 points to finish.';
+                            }
+                        });
+                        coordInputContainer.appendChild(finishPolyBtn);
+                    }
+                }
+                
+                if (coordInputContainer.hasChildNodes()) {
+                    coordInputContainer.style.display = 'flex';
+                } else {
+                    coordInputContainer.style.display = 'none';
+                }
+            }
+
+            function hideCoordInput() {
+                coordInputContainer.innerHTML = '';
+                coordInputContainer.style.display = 'none';
+                if (activeTool !== 'fillet-tool' && activeTool !== 'save-tool' && activeTool !== 'clear-tool' && activeTool !== 'clear-data-tool') {
+                     statusBar.textContent = `${activeTool.replace('-tool', '')} tool active. Click on canvas.`;
+                }
+            }
+
+            tools.forEach(tool => {
+                tool.addEventListener('click', () => {
+                    tools.forEach(t => t.classList.remove('active'));
+                    tool.classList.add('active');
+                    activeTool = tool.id;
+                    currentPath = []; 
+                    selectedPaths = []; 
+
+                    if (activeTool === 'fillet-tool') {
+                        filletControls.style.display = 'flex';
+                        statusBar.textContent = 'Fillet tool selected. Select two connected lines.';
+                        if(isCoordMode) { 
+                            coordToggle.checked = false;
+                            isCoordMode = false;
+                            canvas.style.pointerEvents = 'auto';
+                            hideCoordInput();
+                        }
+                    } else {
+                        filletControls.style.display = 'none';
+                        if (activeTool === 'clear-tool') {
+                            allPaths = []; 
+                            render();
+                            statusBar.textContent = 'Canvas cleared.';
+                        } else if (activeTool === 'clear-data-tool') {
+                            allPaths = [];
+                            localStorage.removeItem('drawingPaths');
+                            render();
+                            statusBar.textContent = 'All drawing data cleared.';
+                        }
+                        else if (activeTool === 'save-tool') {
+                            const realMapWidthPx = mapWidth;       
+                            const realMapHeightPx = mapHeight;     
+
+                            const tempCanvasSave = document.createElement('canvas');
+                            tempCanvasSave.width = realMapWidthPx;
+                            tempCanvasSave.height = realMapHeightPx;
+                            const tempCtxSave = tempCanvasSave.getContext('2d');
+
+                            // REMOVED: White background fill for transparency
+                            // tempCtxSave.fillStyle = 'white';
+                            // tempCtxSave.fillRect(0, 0, tempCanvasSave.width, tempCanvasSave.height);
+
+                            function realToImagePixelCoords(realX, realY) {
+                                const px = (realX - origin_x) / resolution_x;
+                                const py = realMapHeightPx - ((realY - origin_y) / resolution_y); 
+                                return { x: px, y: py };
+                            }
+                            tempCtxSave.strokeStyle = '#000000'; 
+                            tempCtxSave.lineWidth = 1;     
+
+                            allPaths.forEach(path => {
+                                if (!path.points) return; 
+                                const realWorldPoints = path.points.map(p => canvasToGrid(p.x, p.y));
+
+                                if (realWorldPoints.length < 1 ) return; // Need at least one point to move to
+                                if (path.type !== 'arcFillet' && realWorldPoints.length < 2 && path.type !== 'point' && path.type !== 'spline3' && path.type !== 'spline5') return; // Most paths need 2+ points
+
+                                tempCtxSave.beginPath();
+                                if (!realWorldPoints[0]) return;
+                                const startPx = realToImagePixelCoords(realWorldPoints[0].x, realWorldPoints[0].y);
+                                tempCtxSave.moveTo(startPx.x, startPx.y);
+
+                                if (path.type === 'line' || path.type === 'polyline') {
+                                    if (realWorldPoints.length >=2) {
+                                        for (let i = 1; i < realWorldPoints.length; i++) {
+                                            const pPx = realToImagePixelCoords(realWorldPoints[i].x, realWorldPoints[i].y);
+                                            tempCtxSave.lineTo(pPx.x, pPx.y);
+                                        }
+                                    }
+                                } else if (path.type === 'path' && realWorldPoints.length === 3) { 
+                                    const cpPx = realToImagePixelCoords(realWorldPoints[1].x, realWorldPoints[1].y);
+                                    const endPx = realToImagePixelCoords(realWorldPoints[2].x, realWorldPoints[2].y);
+                                    tempCtxSave.quadraticCurveTo(cpPx.x, cpPx.y, endPx.x, endPx.y);
+                                } else if (path.type === 'arc' && realWorldPoints.length === 3) {
+                                    const p1_real = realWorldPoints[0]; const p2_real = realWorldPoints[1]; const p3_real = realWorldPoints[2];
+                                    const p1_px = realToImagePixelCoords(p1_real.x, p1_real.y);
+                                    const p2_px = realToImagePixelCoords(p2_real.x, p2_real.y);
+                                    const p3_px = realToImagePixelCoords(p3_real.x, p3_real.y);
+
+                                    const D_px = 2 * (p1_px.x * (p2_px.y - p3_px.y) + p2_px.x * (p3_px.y - p1_px.y) + p3_px.x * (p1_px.y - p2_px.y));
+                                    if (Math.abs(D_px) > 1e-6) {
+                                        const K_px = p1_px.x*p1_px.x + p1_px.y*p1_px.y;
+                                        const L_px = p2_px.x*p2_px.x + p2_px.y*p2_px.y;
+                                        const M_px = p3_px.x*p3_px.x + p3_px.y*p3_px.y;
+                                        const centerX_px = (K_px*(p2_px.y - p3_px.y) + L_px*(p3_px.y - p1_px.y) + M_px*(p1_px.y - p2_px.y)) / D_px;
+                                        const centerY_px = (K_px*(p3_px.x - p2_px.x) + L_px*(p1_px.x - p3_px.x) + M_px*(p2_px.x - p1_px.x)) / D_px;
+                                        const radius_px = Math.hypot(p1_px.x - centerX_px, p1_px.y - centerY_px);
+                                        const startAngle_px = Math.atan2(p1_px.y - centerY_px, p1_px.x - centerX_px);
+                                        const endAngle_px = Math.atan2(p3_px.y - centerY_px, p3_px.x - centerX_px);
+                                        const cross_prod_orient_px = (p2_px.x - p1_px.x) * (p3_px.y - p1_px.y) - (p2_px.y - p1_px.y) * (p3_px.x - p1_px.x);
+                                        tempCtxSave.arc(centerX_px, centerY_px, radius_px, startAngle_px, endAngle_px, cross_prod_orient_px < 0);
+                                    } else {
+                                        tempCtxSave.lineTo(p3_px.x, p3_px.y);
+                                    }
+                                } else if ((path.type === 'spline3' || path.type === 'spline5') && realWorldPoints.length >= 2) {
+                                    // Correct spline drawing for save image
+                                    const imagePoints = realWorldPoints.map(p => realToImagePixelCoords(p.x, p.y));
+                                    if (imagePoints.length < 2) return;
+
+                                    tempCtxSave.moveTo(imagePoints[0].x, imagePoints[0].y);
+                                    if (imagePoints.length === 2) { // Draw as line if only 2 points
+                                        tempCtxSave.lineTo(imagePoints[1].x, imagePoints[1].y);
+                                    } else {
+                                        for (let i = 0; i < imagePoints.length - 2; i++) {
+                                            const controlPoint = imagePoints[i + 1];
+                                            const endPointX = (imagePoints[i + 1].x + imagePoints[i + 2].x) / 2;
+                                            const endPointY = (imagePoints[i + 1].y + imagePoints[i + 2].y) / 2;
+                                            tempCtxSave.quadraticCurveTo(
+                                                controlPoint.x,
+                                                controlPoint.y,
+                                                endPointX,
+                                                endPointY
+                                            );
+                                        }
+                                        // Draw the last segment to the actual last point
+                                        const last = imagePoints.length - 1;
+                                        tempCtxSave.quadraticCurveTo(
+                                            imagePoints[last-1].x, imagePoints[last-1].y, // control point
+                                            imagePoints[last].x, imagePoints[last].y     // end point
+                                        );
+                                    }
+                                }
+                                tempCtxSave.stroke();
+                            });
+
+                            const pathImageData = tempCanvasSave.toDataURL('image/png');
+                            fetch('/save_path_image', {
+                                method: 'POST',
+                                body: JSON.stringify({ image: pathImageData }),
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+
+                            const realWorldPathsForJson = allPaths.map(path => {
+                                const realWorldPoints = path.points ? path.points.map(point => {
+                                    const realCoord = canvasToGrid(point.x, point.y);
+                                    return {
+                                        x: parseFloat(realCoord.x.toFixed(3)),
+                                        y: parseFloat(realCoord.y.toFixed(3))
+                                    };
+                                }) : [];
+
+                                let pathDataToSave = {
+                                    type: path.type,
+                                    color: path.color || '#333' // Keep color for all types
+                                };
+
+                                if (path.type === 'line') {
+                                    if (realWorldPoints.length === 2) {
+                                        pathDataToSave.x = [realWorldPoints[0].x, realWorldPoints[1].x];
+                                        pathDataToSave.y = [realWorldPoints[0].y, realWorldPoints[1].y];
+                                    } else { // Malformed line
+                                        pathDataToSave.points = realWorldPoints; // Save raw points as fallback
+                                        pathDataToSave.error = "Line requires 2 points for specified format.";
+                                    }
+                                } else if (path.type === 'arc') {
+                                    if (realWorldPoints.length === 3) {
+                                        const p1_real = realWorldPoints[0]; // start point of arc on canvas
+                                        const p2_real = realWorldPoints[1]; // mid point of arc on canvas
+                                        const p3_real = realWorldPoints[2]; // end point of arc on canvas
+
+                                        pathDataToSave.start_x = p1_real.x;
+                                        pathDataToSave.start_y = p1_real.y;
+                                        pathDataToSave.end_x = p3_real.x;
+                                        pathDataToSave.end_y = p3_real.y;
+
+                                        // Calculate center, radius, and angles using real-world coordinates
+                                        const ax = p1_real.x, ay = p1_real.y;
+                                        const bx = p2_real.x, by = p2_real.y;
+                                        const cx = p3_real.x, cy = p3_real.y;
+
+                                        const D_real = 2 * (ax * (by - cy) + bx * (cy - ay) + cx * (ay - by));
+
+                                        if (Math.abs(D_real) < 1e-9) { // Points are collinear
+                                            pathDataToSave.warning = "Collinear points for arc; center, radius, angles not calculated.";
+                                            // Provide the points so it can be drawn as a line segment by the consumer
+                                            pathDataToSave.collinear_arc_points = [p1_real, p2_real, p3_real];
+                                        } else {
+                                            const K_real = (ax * ax + ay * ay);
+                                            const L_real = (bx * bx + by * by);
+                                            const M_real = (cx * cx + cy * cy);
+
+                                            const centerX_real = (K_real * (by - cy) + L_real * (cy - ay) + M_real * (ay - by)) / D_real;
+                                            const centerY_real = (K_real * (cx - bx) + L_real * (ax - cx) + M_real * (bx - ax)) / D_real;
+                                            const radius_real = Math.hypot(ax - centerX_real, ay - centerY_real);
+                                            
+                                            const startAngle_real = Math.atan2(ay - centerY_real, ax - centerX_real);
+                                            const endAngle_real = Math.atan2(cy - centerY_real, cx - centerX_real);
+
+                                            pathDataToSave.center_x = parseFloat(centerX_real.toFixed(3));
+                                            pathDataToSave.center_y = parseFloat(centerY_real.toFixed(3));
+                                            pathDataToSave.radius = parseFloat(radius_real.toFixed(3));
+                                            pathDataToSave.start_angle = parseFloat(startAngle_real.toFixed(3)); // Radians
+                                            pathDataToSave.end_angle = parseFloat(endAngle_real.toFixed(3));   // Radians
+                                        }
+                                    } else { // Malformed arc
+                                        pathDataToSave.points = realWorldPoints; // Save raw points as fallback
+                                        pathDataToSave.error = "Arc requires 3 points for specified format.";
+                                    }
+                                } else if (path.type === 'spline3' || path.type === 'spline5' || path.type === 'polyline' || path.type === 'path' /* fillet curve */) {
+                                    pathDataToSave.points = realWorldPoints; // Matches "points: coord_data" for splines
+
+                                    if (realWorldPoints.length > 0) {
+                                        pathDataToSave.startPoint = realWorldPoints[0];
+                                        
+                                        if (path.type === 'path' && realWorldPoints.length === 3) { 
+                                            pathDataToSave.endPoint = realWorldPoints[2];
+                                        } else if (realWorldPoints.length >= 1) { 
+                                            pathDataToSave.endPoint = realWorldPoints[realWorldPoints.length - 1];
+                                        }
+                                    }
+                                } else {
+                                    pathDataToSave.points = realWorldPoints;
+                                    if (realWorldPoints.length > 0) {
+                                        pathDataToSave.startPoint = realWorldPoints[0];
+                                        if (realWorldPoints.length > 1) {
+                                             pathDataToSave.endPoint = realWorldPoints[realWorldPoints.length - 1];
+                                        } else {
+                                             pathDataToSave.endPoint = realWorldPoints[0];
+                                        }
+                                    }
+                                }
+                                return pathDataToSave;
+                            });
+
+
+                            fetch('/save_path_json', {
+                                method: 'POST',
+                                body: JSON.stringify({ paths: realWorldPathsForJson }),
+                                headers: { 'Content-Type': 'application/json' }
+                            });
+                            statusBar.textContent = 'Image (transparent bg) and JSON saved.';
+                        }
+                         else { 
+                            if (isCoordMode) { 
+                                showCoordInput();
+                            } else { 
+                                statusBar.textContent = `${activeTool.replace('-tool', '')} tool selected. Click to start drawing.`;
+                            }
+                        }
+                    }
+                    render();
+                });
+            });
+
+            canvas.addEventListener('mousedown', (e) => {
+                if (isCoordMode) return;
+                const rect = canvas.getBoundingClientRect();
+                let x = e.clientX - rect.left;
+                let y = e.clientY - rect.top;
+
+                if (snapPoint) { 
+                    x = snapPoint.x;
+                    y = snapPoint.y;
+                }
+
+                if (orthoMode && currentPath.length > 0 && (activeTool === 'line-tool' || activeTool === 'polyline-tool')) {
+                    const last = currentPath[currentPath.length - 1];
+                    const dx = Math.abs(x - last.x);
+                    const dy = Math.abs(y - last.y);
+                    if (dx < dy) {
+                        x = last.x; 
+                    } else {
+                        y = last.y; 
+                    }
+                }
+
+                if (activeTool === 'fillet-tool') {
+                    const nearest = findNearestLine(x, y);
+                    if (nearest) {
+                        const isAlreadySelected = selectedPaths.some(sp => sp.path.index === nearest.path.index);
+                        if (isAlreadySelected) {
+                            selectedPaths = selectedPaths.filter(sp => sp.path.index !== nearest.path.index);
+                        } else {
+                            if (selectedPaths.length < 2) {
+                                selectedPaths.push(nearest); 
+                            }
+                            if (selectedPaths.length === 2) {
+                                const filletData = calculateFillet();
+                                if (filletData) {
+                                     applyFillet(filletData);
+                                } else {
+                                    selectedPaths = [];
+                                }
+                            }
+                        }
+                    }
+                } else if (activeTool === 'clear-tool' || activeTool === 'clear-data-tool' || activeTool === 'save-tool') {
+                    return; 
+                } else { 
+                    if (e.button === 2) { 
+                        if (currentPath.length >= 2 && (activeTool === 'polyline-tool' || activeTool === 'spline3-tool' || activeTool === 'spline5-tool')) {
+                            allPaths.push({
+                                type: activeTool.replace('-tool', ''),
+                                points: [...currentPath],
+                                color: '#333'
+                            });
+                            currentPath = [];
+                            statusBar.textContent = `${activeTool.replace('-tool', '')} completed.`;
+                        } else {
+                            currentPath = [];
+                            statusBar.textContent = `Drawing cancelled for ${activeTool.replace('-tool', '')}.`;
+                        }
+                        drawing = false; 
+                        return; 
+                    }
+
+                    currentPath.push({ x, y });
+                    drawing = true; 
+
+                    if (activeTool === 'line-tool') {
+                        if (currentPath.length === 1) {
+                            statusBar.textContent = 'Line: Click to set end point.';
+                        } else if (currentPath.length === 2) {
+                            allPaths.push({ type: 'line', points: [...currentPath], color: '#333' });
+                            currentPath = [];
+                            drawing = false;
+                            statusBar.textContent = 'Line completed. Click to start a new line.';
+                        }
+                    } else if (activeTool === 'polyline-tool') {
+                        statusBar.textContent = `Polyline: Point ${currentPath.length} added. Click for next, or right-click to finish.`;
+                    } else if (activeTool === 'arc-tool') {
+                         statusBar.textContent = `Arc: Point ${currentPath.length}/3. Click for next point.`;
+                        if (currentPath.length === 3) {
+                            allPaths.push({ type: 'arc', points: [...currentPath], color: '#333' });
+                            currentPath = [];
+                            drawing = false;
+                            statusBar.textContent = 'Arc completed. Click to start a new arc.';
+                        }
+                    } else if (activeTool === 'spline3-tool') {
+                        statusBar.textContent = `Spline3: Point ${currentPath.length}/4.`;
+                        if (currentPath.length === 4) {
+                            allPaths.push({ type: 'spline3', points: [...currentPath], color: '#333' });
+                            currentPath = [];
+                            drawing = false;
+                            statusBar.textContent = 'Spline3 completed. Right-click or select new tool.';
+                        }
+                    } else if (activeTool === 'spline5-tool') {
+                         statusBar.textContent = `Spline5: Point ${currentPath.length}/6.`;
+                        if (currentPath.length === 6) {
+                            allPaths.push({ type: 'spline5', points: [...currentPath], color: '#333' });
+                            currentPath = [];
+                            drawing = false;
+                            statusBar.textContent = 'Spline5 completed. Right-click or select new tool.';
+                        }
+                    }
+                }
+                render();
+            });
+
+            canvas.addEventListener('mousemove', (e) => {
+                if (isCoordMode) return;
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                snapPoint = findSnapPoint(x, y);
+                tempPoint = snapPoint ? { x: snapPoint.x, y: snapPoint.y } : { x, y };
+                
+                if (drawing && orthoMode && currentPath.length > 0 && (activeTool === 'line-tool' || activeTool === 'polyline-tool')) {
+                    const last = currentPath[currentPath.length - 1];
+                    const dx = Math.abs(tempPoint.x - last.x);
+                    const dy = Math.abs(tempPoint.y - last.y);
+                    if (dx < dy) {
+                        tempPoint.x = last.x; 
+                    } else {
+                        tempPoint.y = last.y; 
+                    }
+                }
+                render();
+            });
+
+            canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+
+            document.getElementById('line-tool').click(); 
+            render(); 
+        }
+    </script>
+</body>
+</html>
